@@ -1,0 +1,9 @@
+[Unit]
+Description=Convert Music TV screen-bug PNGs to raw BGRA for mpv
+
+[Service]
+Type=oneshot
+User=@USER@
+ExecStart=/usr/bin/python3 @MODULE_DIR@/scripts/musictv_bugs.py
+Environment=PYTHONUNBUFFERED=1
+Nice=10

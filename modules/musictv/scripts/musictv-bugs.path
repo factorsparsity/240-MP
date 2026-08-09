@@ -1,0 +1,13 @@
+[Unit]
+Description=Watch the Music TV screen-bug directory for new logos
+# Dropping a transparent PNG into musictv_bugs should put it into rotation without
+# any further step — mpv's overlay-add cannot read a PNG, so something has to
+# convert it (see musictv_bugs.py), and that something has to be triggered.
+
+[Path]
+# A directory's mtime changes when a file is added or removed, which is exactly
+# the event we care about.
+PathChanged=@HOME@/.local/share/240-MP/musictv_bugs
+
+[Install]
+WantedBy=default.target

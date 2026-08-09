@@ -1,0 +1,45 @@
+{
+  "id": "com.240mp.musictv",
+  "name": "Music TV",
+  "icon": "assets/images/logo.svg",
+  "version": "1.0",
+  "entry_point_qml": "views/Root.qml",
+
+  "settings": [
+    {
+      "key": "enabled",
+      "label": "Enabled",
+      "type": "toggle",
+      "default": "OFF"
+    },
+    {
+      "key": "playback_resolution",
+      "label": "Playback Resolution",
+      "type": "list_single",
+      "options": ["480p", "720p", "1080p"],
+      "default": "480p"
+    },
+    {
+      "key": "show_titles",
+      "label": "Show Video Titles",
+      "type": "toggle",
+      "default": "ON",
+      "description": "The artist/song card in the style of a 1980s music-video channel, shown at the start and again near the end of each music video."
+    },
+    {
+      "key": "show_screenbug",
+      "label": "Show Screen Bug",
+      "type": "toggle",
+      "default": "ON",
+      "description": "Corner logo overlay. Drop your own transparent PNGs into musictv_bugs in the data directory."
+    },
+    {
+      "key": "videos_per_break",
+      "label": "Videos Between Bumpers",
+      "type": "list_single",
+      "options": ["2-4", "1", "2", "3", "4", "5"],
+      "default": "2-4",
+      "description": "How many music videos play between bumpers. 2-4 picks a new random count for every segment."
+    }
+  ]
+}

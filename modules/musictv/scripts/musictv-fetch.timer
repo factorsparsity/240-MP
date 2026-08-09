@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh the Music TV playlist cache daily
+
+[Timer]
+# Playlists change rarely; this is mostly here to drop videos YouTube has taken
+# down, which otherwise stall the rotation for one entry each.
+OnBootSec=10min
+OnUnitActiveSec=24h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
