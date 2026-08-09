@@ -1,0 +1,30 @@
+[Unit]
+Description=HDHomeRun PSIP EPG scan for 240-MP
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=@USER@
+# Module-local path: the scanner ships inside the module (next to psip.py, which
+# it imports), so it lands wherever the module is installed rather than at a
+# separate absolute path. Needs only Python — the TSDuck dependency was removed
+# precisely because TSDuck is not packaged for Raspbian/armhf.
+# @MODULE_DIR@ is substituted with the real install path at install time. This
+# was hardcoded to /home/vcr/240-MP and broke silently the moment that source
+# checkout was deleted for an install.sh install — a failing timer is invisible.
+# Goes through the same trigger script the in-app toggle uses, with --force to
+# skip the flag check. That way the scheduled scan also picks up the tuner from
+# config.json's device_id, instead of scanning whatever IP was baked in at deploy
+# time and silently diverging once someone switches tuners.
+ExecStart=/usr/bin/python3 @MODULE_DIR@/scripts/epg-rescan-trigger.py --force
+Environment=EPG_SCANNER=@MODULE_DIR@/scripts/epg_scanner.py
+# See epg-rescan.service: without this the trigger's own log lines are buffered
+# until it exits, so a running scan looks like it skipped them entirely.
+Environment=PYTHONUNBUFFERED=1
+# Write to the app's own data dir, which is where HdhrService.load_guide() reads
+# from. No root needed, and no separate /var/lib path to keep in sync.
+Environment=EPG_CACHE_PATH=@HOME@/.local/share/240-MP/epg_cache.json
+# Each multiplex capture ties up one tuner for ~45s. Avoid clashing with an
+# active viewing session — with a 2-tuner device one stays free for viewing.
+Nice=10

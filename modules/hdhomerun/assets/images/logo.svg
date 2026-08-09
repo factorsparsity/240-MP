@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="100%" height="100%" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg" style="fill-rule:evenodd;clip-rule:evenodd;">
+  <!-- Rabbit-ear antenna over a CRT: broadcast source, retro set. White fill to
+       match the other module logos (they are tinted by the shell). -->
+  <g style="fill:white">
+    <!-- antenna mast + ears -->
+    <path d="M11.4,8.6L11.4,6.9L5.6,1.7L6.6,0.6L12,5.4L17.4,0.6L18.4,1.7L12.6,6.9L12.6,8.6L11.4,8.6Z"/>
+    <!-- CRT body -->
+    <path d="M3,9.4C2.3,9.4 1.8,10 1.8,10.6L1.8,22.2C1.8,22.8 2.3,23.4 3,23.4L21,23.4C21.7,23.4 22.2,22.8 22.2,22.2L22.2,10.6C22.2,10 21.7,9.4 21,9.4L3,9.4ZM3.6,11.2L17,11.2L17,21.6L3.6,21.6L3.6,11.2Z"/>
+    <!-- tuning knobs -->
+    <circle cx="19.6" cy="13.2" r="1.3"/>
+    <circle cx="19.6" cy="17.2" r="1.3"/>
+  </g>
+</svg>
