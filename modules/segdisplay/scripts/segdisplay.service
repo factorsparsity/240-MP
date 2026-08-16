@@ -1,0 +1,29 @@
+[Unit]
+Description=240-MP front-panel OLED (SSD1306, drawn as 7-segment)
+# No After=240mp.service: the daemon is useful without the app (it shows the
+# clock) and the app is fine without the daemon (its POSTs just fail), so
+# neither ordering buys anything and a dependency would only add a way to fail.
+
+[Service]
+Type=simple
+User=@USER@
+# @MODULE_DIR@ / @HOME@ / @USER@ are substituted with the real install path at
+# install time. Hardcoding /home/vcr broke the EPG units once already, silently.
+ExecStart=/usr/bin/python3 @MODULE_DIR@/scripts/segdisplay.py
+# Belt and braces. The daemon blanks the panel on a clean exit; this covers a
+# SIGKILL, so the box never sits powered off with digits still lit — which on an
+# OLED is a burn-in risk, not just an eyesore.
+ExecStopPost=/usr/bin/python3 @MODULE_DIR@/scripts/segdisplay.py --clear
+Environment=MP240_CONFIG=@HOME@/.local/share/240-MP/config.json
+# print() to the journal is block-buffered otherwise, so the startup line and
+# any font/overflow complaint would only appear when the process dies.
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=2
+# I2C access comes from the user's `i2c` group membership, which systemd picks
+# up via initgroups for User=. No SupplementaryGroups= line: naming a group that
+# does not exist yet makes the unit fail to start rather than degrade.
+Nice=5
+
+[Install]
+WantedBy=default.target

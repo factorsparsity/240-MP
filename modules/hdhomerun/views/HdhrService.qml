@@ -191,6 +191,39 @@ QtObject {
     }
 
     // ---------------------------------------------------------------------
+    // Front panel
+    // ---------------------------------------------------------------------
+
+    // Push a channel number to the 7-segment display daemon (modules/segdisplay).
+    // Lives here rather than in each view because the service is the one object
+    // every view already holds, and because the number is this module's alone —
+    // every other module shows an elapsed timer instead.
+    //
+    // Silent by design: the panel is optional hardware that may not be wired up,
+    // and this fires on every cursor move. SegHook.qml does the "is it there"
+    // logging once, so a missing daemon is still diagnosable.
+    // The URL is duplicated in segdisplay's own QML; see CLAUDE.md.
+    property var _panelPending: []
+
+    function announceChannel(guideNumber) {
+        if (!guideNumber)
+            return
+        var xhr = new XMLHttpRequest()
+        // Held until done: a collected XMLHttpRequest is reset before it sends.
+        _panelPending.push(xhr)
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return
+            var i = svc._panelPending.indexOf(xhr)
+            if (i >= 0)
+                svc._panelPending.splice(i, 1)
+        }
+        xhr.open("POST", "http://127.0.0.1:8377/state")
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.send(JSON.stringify({ channel: String(guideNumber) }))
+    }
+
+    // ---------------------------------------------------------------------
     // EPG
     // ---------------------------------------------------------------------
 
