@@ -716,19 +716,49 @@ class Weather:
     """
 
     REFRESH = 600            # seconds between successful polls
-    RETRY = 60               # after a failure — the box may just have booted
+    RETRY_FIRST = 10         # first retry after a failure
+    RETRY_MAX = 60           # ceiling for the backoff
     TIMEOUT = 10
+    # How long a reading from the cache file is worth showing. Long enough to
+    # cover a reboot or an outage, short enough that nobody reads yesterday's
+    # temperature off the front panel and believes it.
+    STALE_AFTER = 3 * 3600
     FORECAST = "https://api.open-meteo.com/v1/forecast"
     GEOCODE = "https://geocoding-api.open-meteo.com/v1/search"
 
     def __init__(self, settings, path=LOCATION_FILE):
         self.settings = settings
         self.path = path
+        self.cache = CONFIG.parent / "segdisplay_weather.json"
         self.lock = threading.Lock()
         self.data = None     # (temp, code, high, low)
         self.error = None
         self.coords = None
         self._next = 0.0
+        self._fails = 0
+        self._load_cache()
+
+    # -- cache ------------------------------------------------------------
+    def _load_cache(self):
+        """Last good reading, so a reboot has something to show immediately.
+
+        Without this, a cold boot plus one transient 503 leaves the weather
+        screen showing the clock for a full retry interval — which is exactly
+        the window someone walks into the module in.
+        """
+        try:
+            body = json.loads(self.cache.read_text())
+            if time.time() - float(body["time"]) < self.STALE_AFTER:
+                self.data = tuple(body["data"])
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+
+    def _save_cache(self, data):
+        try:
+            self.cache.write_text(json.dumps({"time": time.time(),
+                                              "data": list(data)}))
+        except OSError:
+            pass     # a read-only data dir is not worth failing a poll over
 
     # -- location ---------------------------------------------------------
     def _first_line(self):
@@ -784,7 +814,11 @@ class Weather:
         render loop, which must keep its 0.25s tick even with the network down."""
         if now < self._next:
             return
-        self._next = now + self.RETRY
+        # Back off from 10s rather than sitting out a flat minute: the failure
+        # that actually happens is a boot-time one (no DNS yet, or a transient
+        # 503), and it clears in seconds.
+        self._next = now + min(self.RETRY_MAX,
+                               self.RETRY_FIRST * (2 ** self._fails))
         try:
             if self.coords is None:
                 self.coords = self._resolve()
@@ -798,20 +832,24 @@ class Weather:
                              timezone="auto", forecast_days=1)
             current = body["current"]
             daily = body.get("daily") or {}
+            fresh = (
+                float(current["temperature_2m"]),
+                int(current.get("weather_code") or 0),
+                (daily.get("temperature_2m_max") or [None])[0],
+                (daily.get("temperature_2m_min") or [None])[0],
+            )
             with self.lock:
-                self.data = (
-                    float(current["temperature_2m"]),
-                    int(current.get("weather_code") or 0),
-                    (daily.get("temperature_2m_max") or [None])[0],
-                    (daily.get("temperature_2m_min") or [None])[0],
-                )
+                self.data = fresh
                 self.error = None
+            self._save_cache(fresh)
+            self._fails = 0
             self._next = now + self.REFRESH
         # Every failure mode here is the same failure — no data this time — and
         # they are all transient: no DNS at boot, no route, a 503, malformed
         # JSON. The panel's job is to fall back to the clock, not to crash a
         # thread the render loop depends on.
         except Exception as exc:                      # noqa: BLE001
+            self._fails = min(self._fails + 1, 8)
             with self.lock:
                 self.error = str(exc)
 

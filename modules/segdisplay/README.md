@@ -154,7 +154,13 @@ vanish a minute later.
 `--weather` is the one that isolates weather faults: it prints the reading, or
 the reason there is none. `/status` also carries `weather_error`, and a fresh
 boot legitimately shows `Temporary failure in name resolution` until the network
-is up — the poller retries every 60s.
+is up, or an occasional `HTTP Error 503` from open-meteo.
+
+Neither should reach the panel: the last good reading is cached in
+`segdisplay_weather.json` (data dir, good for 3 hours) and loaded at startup, and
+retries back off from 10s rather than a flat minute. If the weather screen shows
+the **clock**, it means there is no reading at all — no cache and every fetch
+failing — so check `weather_error` and the location file, in that order.
 
 `--test` starts with an all-pixels frame on purpose: it answers "is the whole
 128x32 area alive and the right way up" before the glyph geometry is in play.
