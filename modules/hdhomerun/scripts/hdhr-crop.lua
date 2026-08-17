@@ -19,28 +19,36 @@
 --   hdhr-crop-channel=<num>    virtual channel being tuned, e.g. 12.1
 
 local msg = require "mp.msg"
-local opt = require "mp.options"
 
-local opts = {
-    ["hdhr-crop-store"] = "",
-    ["hdhr-crop-channel"] = "",
-}
-opt.read_options(opts, "hdhr-crop")
+-- Read the raw script-opts table, the way musictv-overlay.lua does, rather than
+-- mp.options.read_options(). read_options prefixes every *table key* with the
+-- identifier it is given, so a table keyed "hdhr-crop-store" under identifier
+-- "hdhr-crop" silently looks for "hdhr-crop-hdhr-crop-store", finds nothing, and
+-- leaves the script inert with no error anywhere. Indexing the table directly
+-- means the name here is the name on the command line, full stop.
+local opts = mp.get_property_native("options/script-opts") or {}
 
 -- Set by MpvController on decode paths where --panscan blanks the video (the
 -- Pi 3 overlay path with 1080p Playback ON). The app hides the CROP button
 -- there; forcing panscan ourselves would black out the picture, so this script
 -- stands down entirely. Same option the OSC reads.
-local crop_unavailable = mp.get_opt("hide-crop") == "1"
+local crop_unavailable = opts["hide-crop"] == "1"
 
-local store = opts["hdhr-crop-store"]
-local channel = opts["hdhr-crop-channel"]
+local store = opts["hdhr-crop-store"] or ""
+local channel = opts["hdhr-crop-channel"] or ""
 
 -- channel -> "0" / "1". Plain text, one "channel<TAB>value" per line: the whole
 -- payload is a number per channel, and this stays readable and hand-editable
 -- without depending on a JSON serialiser being present in every mpv build.
 local memory = {}
-local applied = nil
+
+-- Nothing is recorded until the file is open and any remembered value has been
+-- applied. mp.observe_property fires once immediately at registration, carrying
+-- panscan's startup value (0 unless the app's own auto_crop passed --panscan=1)
+-- — and that is not a user action. Recording it overwrites the remembered value
+-- with "not cropped" before the restore ever runs, which looks exactly like the
+-- memory not working.
+local ready = false
 
 local function load()
     local fh = io.open(store, "r")
@@ -89,25 +97,22 @@ else
     -- become real.
     mp.register_event("file-loaded", function()
         local want = memory[channel]
-        if want == nil then return end     -- never cropped here; leave the app's
-                                           -- own auto_crop default alone
-        applied = want
-        mp.set_property("panscan", want == "1" and "1.0" or "0.0")
-        msg.info(string.format("channel %s restored crop %s", channel, want))
+        if want ~= nil then                -- nil: never cropped here, so leave
+                                           -- the app's own auto_crop default alone
+            mp.set_property("panscan", want == "1" and "1.0" or "0.0")
+            msg.info(string.format("channel %s restored crop %s", channel, want))
+        end
+        -- From here on, a panscan change is the user pressing CROP. Our own set
+        -- above may echo back through the observer, but remember() ignores a
+        -- value it already holds.
+        ready = true
     end)
 
     -- Observing the property rather than intercepting the CROP button means this
     -- also catches a crop set any other way, and cannot drift out of step with
     -- what the picture is actually doing.
     mp.observe_property("panscan", "number", function(_, value)
-        if value == nil then return end
-        local now = value > 0.5 and "1" or "0"
-        -- Ignore the echo of our own restore.
-        if applied ~= nil and now == applied then
-            applied = nil
-            return
-        end
-        applied = nil
-        remember(now)
+        if not ready or value == nil then return end
+        remember(value > 0.5 and "1" or "0")
     end)
 end
