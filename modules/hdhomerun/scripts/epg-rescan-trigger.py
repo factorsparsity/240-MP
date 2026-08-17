@@ -15,6 +15,7 @@ writes nothing, and exits — so it settles after exactly one no-op rather than
 looping. Every other settings change lands here too and exits the same way.
 """
 
+import fcntl
 import json
 import os
 import pathlib
@@ -23,6 +24,14 @@ import sys
 
 MODULE_ID = "com.240mp.hdhomerun"
 KEY = "rescan_guide"
+
+# One scan at a time, across both entry points. systemd serialises each *unit*,
+# but epg-scan.service (nightly) and epg-rescan.service (the in-app toggle) are
+# two units, and the tuner is one device: when the timer fired during a running
+# rescan, every RF came back "HTTP 503 Service Unavailable", the whole run took
+# a second, and it still rewrote the cache — leaving an hour-old timestamp on
+# day-old data, which is a genuinely confusing thing to debug from the guide.
+LOCK_PATH = pathlib.Path(os.environ.get("EPG_SCAN_LOCK", "/tmp/240mp-epg-scan.lock"))
 
 CONFIG = pathlib.Path(
     os.environ.get("MP240_CONFIG", pathlib.Path.home() / ".local/share/240-MP/config.json")
@@ -75,6 +84,16 @@ def main():
     if not SCANNER.exists():
         print(f"scanner not found at {SCANNER}", file=sys.stderr)
         return 1
+
+    # Held for the whole scan; released when this process exits, however it exits.
+    # Non-blocking on purpose: a scan that cannot start now would be starting
+    # against a busy tuner anyway, and the timer will come round again.
+    lock = open(LOCK_PATH, "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print("another scan is already running; skipping this one", file=sys.stderr)
+        return 0
 
     # Scan the tuner the user actually selected. The scanner reads HDHOMERUN_IP
     # and otherwise falls back to a hardcoded default, so without this the module
