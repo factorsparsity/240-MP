@@ -17,6 +17,10 @@ FocusScope {
     id: guideRoot
 
     property var navParams: ({})
+    // Set by Root.navigateBack() from the listState this view pushed on its way
+    // out, so coming back from a channel lands on that channel rather than at
+    // the top of the lineup. Same contract Channels.qml uses.
+    property var navListState: navParams.navListState || ({})
 
     // Injected by Root.qml — see HdhrService.qml.
     property var hdhr
@@ -144,6 +148,16 @@ FocusScope {
         function onChannelsLoaded(items) {
             guideRoot.channels = items
             guideRoot.channelsReady = true
+            if (items.length > 0) {
+                var restore = (guideRoot.navListState.currentIndex !== undefined)
+                            ? guideRoot.navListState.currentIndex : 0
+                guideRoot.currentChannel = Math.min(restore, items.length - 1)
+                // forceLayout first: the model was assigned a line ago, so the
+                // delegates positionViewAtIndex needs do not exist yet and the
+                // scroll would silently do nothing.
+                channelColumn.forceLayout()
+                channelColumn.positionViewAtIndex(guideRoot.currentChannel, ListView.Contain)
+            }
             guideRoot.currentEvent = guideRoot.eventIndexAt(guideRoot.currentChannelNumber(),
                                                            guideRoot.windowStart)
         }
