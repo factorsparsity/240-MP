@@ -336,13 +336,20 @@ def draw_text(buf, x, y, text, scale=1, dither=False):
     return cx
 
 
-def fit_scale(text, max_width, max_scale=2):
-    """Largest integer scale that fits, never below 1 — a label too long even at
-    1x is truncated by the caller rather than shrunk into illegibility."""
-    for scale in range(max_scale, 1, -1):
-        if text_width(text, scale) <= max_width:
-            return scale
-    return 1
+# Labels are always this size — never scaled to fit. A label that shrank to suit
+# its own length made the panel jump between two type sizes as the cursor moved,
+# which reads as a glitch rather than as a design. At 4x a glyph is 20x28, close
+# enough to the 30px 7-segment digits that the two screens look like one device;
+# what does not fit scrolls instead. This is the knob: 3 shows ~7 characters at
+# 21px, 4 shows ~5 at 28px.
+LABEL_SCALE = 4
+LABEL_MARGIN = 2
+
+# Marquee timing. Parked at each end long enough to actually read the ends,
+# which is the point of holding at all.
+MARQUEE_HOLD = 1.2         # seconds stationary at start and at end
+MARQUEE_SPEED = 44.0       # pixels per second
+MARQUEE_TICK = 0.05        # render period while something is scrolling
 
 
 # ---------------------------------------------------------------------------
@@ -420,34 +427,59 @@ def render_weather_frame(temp, code, high, low, ghost=False, shift=(0, 0)):
     return buf
 
 
-def render_label_frame(label, shift=(0, 0)):
-    """One centred text label — a menu selection, or SETUP.
+def label_travel(label):
+    """Pixels a label has to scroll to reveal its tail. 0 means it fits."""
+    return max(0, text_width(label, LABEL_SCALE) - (WIDTH - 2 * LABEL_MARGIN))
 
-    Two lines only if one will not fit at 1x, and the split is on a space so a
-    module name never breaks mid-word.
+
+def render_label_frame(label, offset=0, shift=(0, 0)):
+    """One text label — a menu selection, or SETUP — at full height.
+
+    Short labels are centred; anything wider than the panel is left-aligned and
+    drawn shifted by `offset`, which the caller ramps to scroll it. Clipping is
+    free: _rect already discards pixels outside the panel.
     """
     buf = bytearray(FRAME_BYTES)
     label = str(label).upper().strip()
     ox, oy = shift[0], shift[1]
-    usable = WIDTH - 4
+    y = (HEIGHT - GLYPH_H * LABEL_SCALE) // 2
 
-    scale = fit_scale(label, usable)
-    if text_width(label, 1) <= usable:
-        y = (HEIGHT - GLYPH_H * scale) // 2
-        draw_text(buf, ox + (WIDTH - text_width(label, scale)) // 2, oy + y,
-                  label, scale)
-        return buf
-
-    # Too long for one line: break at the last space that fits.
-    per_line = (usable + 1) // (GLYPH_W + 1)
-    cut = label.rfind(" ", 0, per_line + 1)
-    if cut <= 0:
-        cut = per_line
-    first, second = label[:cut].strip(), label[cut:].strip()[:per_line]
-    for i, part in enumerate((first, second)):
-        y = 4 + i * (GLYPH_H + 4)
-        draw_text(buf, ox + (WIDTH - text_width(part, 1)) // 2, oy + y, part)
+    width = text_width(label, LABEL_SCALE)
+    if label_travel(label) <= 0:
+        x = (WIDTH - width) // 2
+    else:
+        x = LABEL_MARGIN - int(offset)
+    draw_text(buf, ox + x, oy + y, label, LABEL_SCALE)
     return buf
+
+
+class Marquee:
+    """Where a label sits this instant: parked, scrolling, parked, then back.
+
+    Deliberately a function of elapsed time rather than an accumulated position,
+    so a slow tick or a missed frame cannot make the text drift out of step with
+    itself — it just draws the phase it should be at.
+    """
+
+    def __init__(self):
+        self.text = None
+        self.started = 0.0
+
+    def offset(self, label, now):
+        if label != self.text:
+            self.text = label
+            self.started = now
+        travel = label_travel(label)
+        if travel <= 0:
+            return 0
+        crossing = travel / MARQUEE_SPEED
+        period = MARQUEE_HOLD + crossing + MARQUEE_HOLD
+        phase = (now - self.started) % period
+        if phase < MARQUEE_HOLD:
+            return 0
+        if phase < MARQUEE_HOLD + crossing:
+            return (phase - MARQUEE_HOLD) * MARQUEE_SPEED
+        return travel
 
 
 # ---------------------------------------------------------------------------
@@ -917,12 +949,12 @@ def render(state, settings, weather, now):
     return ("digits", ("", False))
 
 
-def render_scene(scene, ghost=False, shift=(0, 0)):
+def render_scene(scene, ghost=False, shift=(0, 0), offset=0):
     kind, payload = scene
     if kind == "weather":
         return render_weather_frame(*payload, ghost=ghost, shift=shift)
     if kind == "label":
-        return render_label_frame(payload, shift=shift)
+        return render_label_frame(payload, offset, shift)
     text, colon = payload
     return render_frame(encode(text), colon, ghost, shift)
 
@@ -1035,6 +1067,7 @@ def serve():
     settings = Settings()
     state = State()
     weather = Weather(settings)
+    marquee = Marquee()
     display.set_brightness(settings.brightness())
 
     Handler.state = state
@@ -1061,16 +1094,30 @@ def serve():
             Handler.current = scene
             ghost = settings.ghost_segments()
             shift = SHIFT_STEPS[int(now // SHIFT_SECONDS) % len(SHIFT_STEPS)]
-            key = (scene, ghost, shift)
+
+            scrolling = False
+            offset = 0
+            if scene[0] == "label":
+                offset = marquee.offset(str(scene[1]).upper().strip(), now)
+                scrolling = label_travel(str(scene[1]).upper().strip()) > 0
+                # Quantised so a parked marquee produces an unchanged key and
+                # therefore no I2C traffic at all while it sits at either end.
+                offset = int(offset)
+
+            key = (scene, ghost, shift, offset)
             if key != display.last:
                 try:
-                    buf = render_scene(scene, ghost, shift)
+                    buf = render_scene(scene, ghost, shift, offset)
                 except ValueError as exc:
                     # A channel number that will not fit is a bug, not a crash.
                     print("[segdisplay] %s" % exc, file=sys.stderr)
                     buf = render_frame(encode("----"), False, ghost, shift)
                 display.blit(buf, key)
-            time.sleep(0.25)
+
+            # Fast only while text is actually moving. A 512-byte frame is ~13ms
+            # on a 400kHz bus, so 20Hz costs a quarter of the bus during a scroll
+            # and nothing at all the rest of the time.
+            time.sleep(MARQUEE_TICK if scrolling else 0.25)
     except KeyboardInterrupt:
         pass
     finally:
@@ -1109,7 +1156,8 @@ def main():
                 print("--label needs a value", file=sys.stderr)
                 return 2
             display.blit(render_label_frame(args[1]), ("label", args[1]))
-            print("showing %r" % args[1])
+            print("showing %r (%d px of scroll needed)"
+                  % (args[1], label_travel(str(args[1]).upper().strip())))
             return 0
         elif args[0] == "--weather":
             # Live, not canned: this is the mode that answers "is the location

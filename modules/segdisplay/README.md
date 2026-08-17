@@ -41,6 +41,14 @@ the LED board could not do:
   7-segment glyphs; that is the panel's character, not a limitation to route
   around.
 
+Menu labels are always drawn at one size (`LABEL_SCALE = 4`, so 20x28 glyphs,
+about five characters across). Labels are **never** scaled to fit: sizing each
+one to its own length made the panel jump between two type sizes as the cursor
+moved, which reads as a glitch rather than as a design. Anything wider than the
+panel parks for 1.2s, scrolls left at 44 px/s, parks at the end, and starts over
+— the standard trick for a narrow panel. `LABEL_SCALE = 3` is the knob if you
+want ~7 characters at 21px instead.
+
 ## Weather
 
 The daemon fetches its own conditions from open-meteo (no API key) using the
