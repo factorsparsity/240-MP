@@ -28,10 +28,12 @@ the LED board could not do:
 
 - **Decimal points that definitely exist.** Half the 4-digit "clock" boards on
   the market carry a colon and no per-digit points, and `12.10` needs one.
-- **Ghost segments** (`Ghost Unlit Segments`, off by default) — the unlit
-  segments drawn at quarter density, which is how a real LED panel shows a faint
-  `8888` behind the digits. There is no per-pixel brightness on a mono OLED, so
-  the dimming is a dither.
+- **Ghost segments** (`Ghost Unlit Segments`: Off / Faint / Medium / Strong) —
+  the unlit segments drawn dimly, the way a real LED panel shows a faint `8888`
+  behind the digits. A mono OLED has no per-pixel brightness, so the level is a
+  dot spacing: Strong lights 1 pixel in 4 (25%), Medium 1 in 9 (11%), Faint 1 in
+  16 (6%). It began as a toggle at the Strong density and that was far too bright
+  on real glass — hence a level, and hence Off by default.
 - **Burn-in protection.** The whole layout shifts by up to two pixels every five
   minutes. An idle clock is exactly the static image that burns an OLED, and
   this box is meant to sit powered on.

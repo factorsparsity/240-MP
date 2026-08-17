@@ -99,6 +99,11 @@ FONT = {
 # range is in the bottom third, so these are not evenly spaced.
 BRIGHTNESS_LEVELS = {"LOW": 0x08, "MEDIUM": 0x40, "HIGH": 0xA0, "MAX": 0xFF}
 
+# Ghost density as a dot spacing: 1 lit pixel per N*N. The steps are far apart
+# because the panel's own contrast already sets the overall level — this only
+# decides how much dimmer the unlit segments are than the lit ones.
+GHOST_LEVELS = {"OFF": 0, "STRONG": 2, "MEDIUM": 3, "FAINT": 4}
+
 # App views that mean "the user is in setup". ModuleList.qml is deliberately not
 # here — that is the home screen, which counts as idle.
 SETTINGS_VIEWS = (
@@ -196,23 +201,25 @@ SHIFT_STEPS = ((0, 0), (1, 0), (2, 0), (2, 1), (1, 1), (0, 1), (-1, 1), (-1, 0))
 SHIFT_SECONDS = 300
 
 
-def _rect(buf, x, y, w, h, dither=False):
+def _rect(buf, x, y, w, h, dither=0):
     """Fill a rectangle in the page-packed frame buffer.
 
-    dither draws every other pixel on both axes — a quarter-density fill, which
-    on a monochrome panel is how you get a dim segment out of a display that has
-    no per-pixel brightness.
+    `dither` is a pixel spacing, not a flag: 0 fills solid, 2 lights one pixel in
+    four, 3 one in nine, 4 one in sixteen. A monochrome OLED has no per-pixel
+    brightness, so spacing is the only dimmer there is — and the difference
+    between the steps is large, which is why the ghost level is a setting rather
+    than a constant somebody has to guess right.
     """
     for py in range(max(0, y), min(HEIGHT, y + h)):
         row = (py >> 3) * WIDTH
         bit = 1 << (py & 7)
         for px in range(max(0, x), min(WIDTH, x + w)):
-            if dither and ((px & 1) or (py & 1)):
+            if dither and (px % dither or py % dither):
                 continue
             buf[row + px] |= bit
 
 
-def render_frame(cells, colon, ghost=False, shift=(0, 0)):
+def render_frame(cells, colon, ghost=0, shift=(0, 0)):
     """Four encoded cells -> a 512-byte SSD1306 frame."""
     buf = bytearray(FRAME_BYTES)
     ox = ORIGIN_X + shift[0]
@@ -225,11 +232,11 @@ def render_frame(cells, colon, ghost=False, shift=(0, 0)):
             if on:
                 _rect(buf, x + sx, oy + sy, sw, sh)
             elif ghost:
-                _rect(buf, x + sx, oy + sy, sw, sh, dither=True)
+                _rect(buf, x + sx, oy + sy, sw, sh, dither=ghost)
         if cell & 0x80:
             _rect(buf, x + DIGIT_W + 1, oy + DIGIT_H - DOT, DOT, DOT)
         elif ghost:
-            _rect(buf, x + DIGIT_W + 1, oy + DIGIT_H - DOT, DOT, DOT, dither=True)
+            _rect(buf, x + DIGIT_W + 1, oy + DIGIT_H - DOT, DOT, DOT, dither=ghost)
 
     # The colon sits in the wide gap after digit 2, at thirds of the digit
     # height — the position a clock radio puts it.
@@ -238,7 +245,7 @@ def render_frame(cells, colon, ghost=False, shift=(0, 0)):
         if colon:
             _rect(buf, cx, cy, DOT, DOT)
         elif ghost:
-            _rect(buf, cx, cy, DOT, DOT, dither=True)
+            _rect(buf, cx, cy, DOT, DOT, dither=ghost)
 
     return buf
 
@@ -390,7 +397,7 @@ WMO = {
 }
 
 
-def render_weather_frame(temp, code, high, low, ghost=False, shift=(0, 0)):
+def render_weather_frame(temp, code, high, low, ghost=0, shift=(0, 0)):
     """Big 7-segment temperature on the left, condition and hi/lo on the right.
 
     Temperature is right-aligned in three cells so -12 and 100 both land without
@@ -408,7 +415,7 @@ def render_weather_frame(temp, code, high, low, ghost=False, shift=(0, 0)):
             if cell & (1 << bit):
                 _rect(buf, x + sx, TEMP_Y + oy + sy, sw, sh)
             elif ghost:
-                _rect(buf, x + sx, TEMP_Y + oy + sy, sw, sh, dither=True)
+                _rect(buf, x + sx, TEMP_Y + oy + sy, sw, sh, dither=ghost)
 
     # Degree mark: a hollow square, which is what the a+b+f+g segment trick
     # approximates on a real 7-segment panel — here it can just be drawn.
@@ -677,7 +684,22 @@ class Settings:
         return is_on(self._values.get("clock_24h"), False)
 
     def ghost_segments(self):
-        return is_on(self._values.get("ghost_segments"), False)
+        """Dot spacing for the unlit segments; 0 is off.
+
+        Was a toggle whose single density turned out far too bright on real
+        glass, so it is a level now. A stored "ON" from that version means the
+        user wanted ghosting, not that they wanted the brightest step — map it to
+        the gentlest one that is still visible.
+        """
+        raw = self._values.get("ghost_segments")
+        if raw is None:
+            return 0
+        if isinstance(raw, bool):
+            return GHOST_LEVELS["FAINT"] if raw else 0
+        name = str(raw).strip().upper()
+        if name in ("ON", "TRUE", "1"):
+            return GHOST_LEVELS["FAINT"]
+        return GHOST_LEVELS.get(name, 0)
 
     def weather_units(self):
         """Follow the weather module's own Metric/US setting rather than adding
@@ -987,7 +1009,7 @@ def render(state, settings, weather, now):
     return ("digits", ("", False))
 
 
-def render_scene(scene, ghost=False, shift=(0, 0), offset=0):
+def render_scene(scene, ghost=0, shift=(0, 0), offset=0):
     kind, payload = scene
     if kind == "weather":
         return render_weather_frame(*payload, ghost=ghost, shift=shift)

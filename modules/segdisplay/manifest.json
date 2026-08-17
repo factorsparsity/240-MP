@@ -22,9 +22,10 @@
     {
       "key": "ghost_segments",
       "label": "Ghost Unlit Segments",
-      "type": "toggle",
-      "default": "OFF",
-      "description": "Draw the unlit segments dimly, the way a real LED panel shows a faint 8888 behind the digits. Off is a plain black background."
+      "type": "list_single",
+      "options": ["Off", "Faint", "Medium", "Strong"],
+      "default": "Off",
+      "description": "Draw the unlit segments dimly, the way a real LED panel shows a faint 8888 behind the digits. An OLED has no per-pixel brightness, so this is a dot spacing: Faint lights 1 pixel in 16, Strong 1 in 4."
     },
     {
       "key": "idle_clock",
