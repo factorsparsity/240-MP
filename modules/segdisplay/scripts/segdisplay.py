@@ -170,18 +170,23 @@ DIGIT_X = (
     (DIGIT_W + GAP) * 3 + (COLON_GAP - GAP),
 )
 
-# Seven rectangles per digit, (dx, dy, w, h) relative to the digit's top-left,
-# indexed by the font's bit order: a b c d e f g.
-_H = DIGIT_H // 2
-SEGMENT_RECTS = (
-    (STROKE, 0, DIGIT_W - 2 * STROKE, STROKE),                       # a  top
-    (DIGIT_W - STROKE, STROKE, STROKE, _H - STROKE),                 # b  top right
-    (DIGIT_W - STROKE, _H, STROKE, DIGIT_H - _H - STROKE),           # c  bottom right
-    (STROKE, DIGIT_H - STROKE, DIGIT_W - 2 * STROKE, STROKE),        # d  bottom
-    (0, _H, STROKE, DIGIT_H - _H - STROKE),                          # e  bottom left
-    (0, STROKE, STROKE, _H - STROKE),                                # f  top left
-    (STROKE, _H - STROKE // 2, DIGIT_W - 2 * STROKE, STROKE),        # g  middle
-)
+def digit_rects(w, h, t):
+    """Seven rectangles for one digit, (dx, dy, w, h) relative to its top-left,
+    in the font's bit order: a b c d e f g. Parameterised by size because the
+    weather screen draws the same glyphs smaller alongside text."""
+    half = h // 2
+    return (
+        (t, 0, w - 2 * t, t),                    # a  top
+        (w - t, t, t, half - t),                 # b  top right
+        (w - t, half, t, h - half - t),          # c  bottom right
+        (t, h - t, w - 2 * t, t),                # d  bottom
+        (0, half, t, h - half - t),              # e  bottom left
+        (0, t, t, half - t),                     # f  top left
+        (t, half - t // 2, w - 2 * t, t),        # g  middle
+    )
+
+
+SEGMENT_RECTS = digit_rects(DIGIT_W, DIGIT_H, STROKE)
 
 # Pixel-shift positions, stepped every SHIFT_SECONDS. An OLED showing a clock
 # 24/7 is exactly the burn-in case, and the idle clock is the most static thing
@@ -235,6 +240,213 @@ def render_frame(cells, colon, ghost=False, shift=(0, 0)):
         elif ghost:
             _rect(buf, cx, cy, DOT, DOT, dither=True)
 
+    return buf
+
+
+# ---------------------------------------------------------------------------
+# A 5x7 font, for the two screens seven segments cannot spell
+# ---------------------------------------------------------------------------
+#
+# Seven segments can draw a channel, a clock and "StP" and nothing else, which
+# was fine on the LED board because nothing else was possible. On a 128x32 OLED
+# it is a self-imposed limit, so menu labels and weather conditions get real
+# glyphs. The 7-segment look still owns every screen that is fundamentally a
+# number — that is the panel's character, not a limitation to route around.
+#
+# Rows top to bottom, "1" is a lit pixel. Authored as strings rather than packed
+# hex so a wrong glyph is visible in the diff instead of needing a decoder.
+_GLYPHS = {
+    "0": "01110/10001/10011/10101/11001/10001/01110",
+    "1": "00100/01100/00100/00100/00100/00100/01110",
+    "2": "01110/10001/00001/00010/00100/01000/11111",
+    "3": "11111/00010/00100/00010/00001/10001/01110",
+    "4": "00010/00110/01010/10010/11111/00010/00010",
+    "5": "11111/10000/11110/00001/00001/10001/01110",
+    "6": "00110/01000/10000/11110/10001/10001/01110",
+    "7": "11111/00001/00010/00100/01000/01000/01000",
+    "8": "01110/10001/10001/01110/10001/10001/01110",
+    "9": "01110/10001/10001/01111/00001/00010/01100",
+    "A": "01110/10001/10001/11111/10001/10001/10001",
+    "B": "11110/10001/10001/11110/10001/10001/11110",
+    "C": "01110/10001/10000/10000/10000/10001/01110",
+    "D": "11100/10010/10001/10001/10001/10010/11100",
+    "E": "11111/10000/10000/11110/10000/10000/11111",
+    "F": "11111/10000/10000/11110/10000/10000/10000",
+    "G": "01110/10001/10000/10111/10001/10001/01111",
+    "H": "10001/10001/10001/11111/10001/10001/10001",
+    "I": "01110/00100/00100/00100/00100/00100/01110",
+    "J": "00111/00010/00010/00010/00010/10010/01100",
+    "K": "10001/10010/10100/11000/10100/10010/10001",
+    "L": "10000/10000/10000/10000/10000/10000/11111",
+    "M": "10001/11011/10101/10101/10001/10001/10001",
+    "N": "10001/11001/11001/10101/10011/10011/10001",
+    "O": "01110/10001/10001/10001/10001/10001/01110",
+    "P": "11110/10001/10001/11110/10000/10000/10000",
+    "Q": "01110/10001/10001/10001/10101/10010/01101",
+    "R": "11110/10001/10001/11110/10100/10010/10001",
+    "S": "01111/10000/10000/01110/00001/00001/11110",
+    "T": "11111/00100/00100/00100/00100/00100/00100",
+    "U": "10001/10001/10001/10001/10001/10001/01110",
+    "V": "10001/10001/10001/10001/10001/01010/00100",
+    "W": "10001/10001/10001/10101/10101/11011/01010",
+    "X": "10001/10001/01010/00100/01010/10001/10001",
+    "Y": "10001/10001/01010/00100/00100/00100/00100",
+    "Z": "11111/00001/00010/00100/01000/10000/11111",
+    " ": "00000/00000/00000/00000/00000/00000/00000",
+    "-": "00000/00000/00000/11111/00000/00000/00000",
+    ".": "00000/00000/00000/00000/00000/01100/01100",
+    ",": "00000/00000/00000/00000/01100/01100/01000",
+    "'": "01100/01100/01000/00000/00000/00000/00000",
+    "/": "00001/00010/00010/00100/01000/01000/10000",
+    "&": "01100/10010/10100/01000/10101/10010/01101",
+    "+": "00000/00100/00100/11111/00100/00100/00000",
+    ":": "00000/01100/01100/00000/01100/01100/00000",
+    "(": "00010/00100/01000/01000/01000/00100/00010",
+    ")": "01000/00100/00010/00010/00010/00100/01000",
+    "%": "11001/11010/00010/00100/01000/01011/10011",
+    "?": "01110/10001/00001/00010/00100/00000/00100",
+    "!": "00100/00100/00100/00100/00100/00000/00100",
+}
+
+GLYPH_W = 5
+GLYPH_H = 7
+FONT5X7 = {ch: tuple(rows.split("/")) for ch, rows in _GLYPHS.items()}
+
+
+def text_width(text, scale=1):
+    """Rendered width including the trailing inter-character gap's absence."""
+    n = len(text)
+    return 0 if n == 0 else (n * (GLYPH_W + 1) - 1) * scale
+
+
+def draw_text(buf, x, y, text, scale=1, dither=False):
+    """Draw uppercase 5x7 text. Unknown characters render as a space rather
+    than raising: this draws live weather descriptions and menu labels from
+    upstream, and a missing glyph must never take the panel down."""
+    cx = x
+    for ch in str(text).upper():
+        rows = FONT5X7.get(ch)
+        if rows is not None:
+            for ry, row in enumerate(rows):
+                for rx, cell in enumerate(row):
+                    if cell == "1":
+                        _rect(buf, cx + rx * scale, y + ry * scale, scale, scale,
+                              dither=dither)
+        cx += (GLYPH_W + 1) * scale
+    return cx
+
+
+def fit_scale(text, max_width, max_scale=2):
+    """Largest integer scale that fits, never below 1 — a label too long even at
+    1x is truncated by the caller rather than shrunk into illegibility."""
+    for scale in range(max_scale, 1, -1):
+        if text_width(text, scale) <= max_width:
+            return scale
+    return 1
+
+
+# ---------------------------------------------------------------------------
+# The two text screens
+# ---------------------------------------------------------------------------
+
+# Temperature block: the same 7-segment glyphs, smaller, so the weather screen
+# still reads as this panel and not as a different device.
+TEMP_W, TEMP_H, TEMP_STROKE = 14, 24, 3
+TEMP_RECTS = digit_rects(TEMP_W, TEMP_H, TEMP_STROKE)
+TEMP_X, TEMP_Y = 2, 4
+TEMP_PITCH = TEMP_W + 3
+DEGREE_X = TEMP_X + TEMP_PITCH * 3 - 3
+DEGREE_SIZE, DEGREE_STROKE = 6, 2
+
+TEXT_X = DEGREE_X + DEGREE_SIZE + 3
+TEXT_MAX = WIDTH - TEXT_X - 1
+TEXT_ROW1, TEXT_ROW2 = 6, 18
+
+# Max characters in the right-hand column at 1x. Conditions are shortened to fit
+# rather than scrolled: a marquee on a front panel is a distraction, and every
+# WMO code has a sensible short form.
+COND_CHARS = (TEXT_MAX + 1) // (GLYPH_W + 1)
+
+# WMO weather codes -> a label that fits. open-meteo returns the code; the app's
+# own NWS text is not reachable from here, and would not fit anyway.
+WMO = {
+    0: "CLEAR", 1: "MAINLY CLR", 2: "PARTLY CLDY", 3: "OVERCAST",
+    45: "FOG", 48: "RIME FOG",
+    51: "LT DRIZZLE", 53: "DRIZZLE", 55: "HVY DRIZZLE",
+    56: "FRZ DRIZZLE", 57: "FRZ DRIZZLE",
+    61: "LIGHT RAIN", 63: "RAIN", 65: "HEAVY RAIN",
+    66: "FRZ RAIN", 67: "FRZ RAIN",
+    71: "LIGHT SNOW", 73: "SNOW", 75: "HEAVY SNOW", 77: "SNOW GRAINS",
+    80: "RAIN SHWRS", 81: "RAIN SHWRS", 82: "HVY SHWRS",
+    85: "SNOW SHWRS", 86: "SNOW SHWRS",
+    95: "T-STORM", 96: "TSTM HAIL", 99: "TSTM HAIL",
+}
+
+
+def render_weather_frame(temp, code, high, low, ghost=False, shift=(0, 0)):
+    """Big 7-segment temperature on the left, condition and hi/lo on the right.
+
+    Temperature is right-aligned in three cells so -12 and 100 both land without
+    the layout moving; two-digit temperatures leave the first cell blank.
+    """
+    buf = bytearray(FRAME_BYTES)
+    ox, oy = shift[0], shift[1]
+
+    text = "%d" % int(round(temp))
+    cells = list(text[-3:].rjust(3))
+    for i, ch in enumerate(cells):
+        cell = FONT.get(ch, 0x00)
+        x = TEMP_X + ox + i * TEMP_PITCH
+        for bit, (sx, sy, sw, sh) in enumerate(TEMP_RECTS):
+            if cell & (1 << bit):
+                _rect(buf, x + sx, TEMP_Y + oy + sy, sw, sh)
+            elif ghost:
+                _rect(buf, x + sx, TEMP_Y + oy + sy, sw, sh, dither=True)
+
+    # Degree mark: a hollow square, which is what the a+b+f+g segment trick
+    # approximates on a real 7-segment panel — here it can just be drawn.
+    dx, dy = DEGREE_X + ox, TEMP_Y + oy
+    _rect(buf, dx, dy, DEGREE_SIZE, DEGREE_STROKE)
+    _rect(buf, dx, dy + DEGREE_SIZE - DEGREE_STROKE, DEGREE_SIZE, DEGREE_STROKE)
+    _rect(buf, dx, dy, DEGREE_STROKE, DEGREE_SIZE)
+    _rect(buf, dx + DEGREE_SIZE - DEGREE_STROKE, dy, DEGREE_STROKE, DEGREE_SIZE)
+
+    label = (WMO.get(code) or "")[:COND_CHARS]
+    draw_text(buf, TEXT_X + ox, TEXT_ROW1 + oy, label)
+
+    if high is not None and low is not None:
+        draw_text(buf, TEXT_X + ox, TEXT_ROW2 + oy,
+                  ("H%d L%d" % (int(round(high)), int(round(low))))[:COND_CHARS])
+    return buf
+
+
+def render_label_frame(label, shift=(0, 0)):
+    """One centred text label — a menu selection, or SETUP.
+
+    Two lines only if one will not fit at 1x, and the split is on a space so a
+    module name never breaks mid-word.
+    """
+    buf = bytearray(FRAME_BYTES)
+    label = str(label).upper().strip()
+    ox, oy = shift[0], shift[1]
+    usable = WIDTH - 4
+
+    scale = fit_scale(label, usable)
+    if text_width(label, 1) <= usable:
+        y = (HEIGHT - GLYPH_H * scale) // 2
+        draw_text(buf, ox + (WIDTH - text_width(label, scale)) // 2, oy + y,
+                  label, scale)
+        return buf
+
+    # Too long for one line: break at the last space that fits.
+    per_line = (usable + 1) // (GLYPH_W + 1)
+    cut = label.rfind(" ", 0, per_line + 1)
+    if cut <= 0:
+        cut = per_line
+    first, second = label[:cut].strip(), label[cut:].strip()[:per_line]
+    for i, part in enumerate((first, second)):
+        y = 4 + i * (GLYPH_H + 4)
+        draw_text(buf, ox + (WIDTH - text_width(part, 1)) // 2, oy + y, part)
     return buf
 
 
@@ -398,6 +610,7 @@ class Settings:
         self.path = path
         self._mtime = None
         self._values = {}
+        self._weather = {}
         self.reload()
 
     def reload(self):
@@ -413,7 +626,9 @@ class Settings:
             cfg = json.loads(self.path.read_text())
         except (OSError, ValueError):
             return False
-        self._values = (cfg.get("modules") or {}).get(MODULE_ID) or {}
+        modules = cfg.get("modules") or {}
+        self._values = modules.get(MODULE_ID) or {}
+        self._weather = modules.get("com.240mp.weather") or {}
         return True
 
     def enabled(self):
@@ -432,12 +647,151 @@ class Settings:
     def ghost_segments(self):
         return is_on(self._values.get("ghost_segments"), False)
 
+    def weather_units(self):
+        """Follow the weather module's own Metric/US setting rather than adding
+        a second, contradictable one here."""
+        units = str(self._weather.get("units", "Metric")).strip().upper()
+        return "fahrenheit" if units == "US" else "celsius"
+
     def module_shown(self, folder):
         """Per-module opt-out. A module with no key defaults to shown, so a
         module added later works without touching the manifest."""
         if not folder:
             return True
         return is_on(self._values.get("show_" + folder), True)
+
+
+# ---------------------------------------------------------------------------
+# Weather — fetched here, not handed over by the app
+# ---------------------------------------------------------------------------
+
+LOCATION_FILE = CONFIG.parent / "weather_location.txt"
+
+
+class Weather:
+    """Current conditions for the weather screen, straight from open-meteo.
+
+    The app cannot give us this. 240-MP's weather data lives in C++
+    (WeatherBackend) with no signal or property reachable from module QML, its
+    background music runs on a private mpv so not even the elapsed-time rung
+    fires, and patching upstream's weather views would add another file a 240-MP
+    upgrade reverts. Reading weather_location.txt directly is the same move this
+    daemon already makes for config.json, and it works whether or not the
+    weather module is even open.
+
+    open-meteo needs no API key, which is why it is the forecast source here
+    even though the app itself prefers NWS observations for the on-screen text.
+    """
+
+    REFRESH = 600            # seconds between successful polls
+    RETRY = 60               # after a failure — the box may just have booted
+    TIMEOUT = 10
+    FORECAST = "https://api.open-meteo.com/v1/forecast"
+    GEOCODE = "https://geocoding-api.open-meteo.com/v1/search"
+
+    def __init__(self, settings, path=LOCATION_FILE):
+        self.settings = settings
+        self.path = path
+        self.lock = threading.Lock()
+        self.data = None     # (temp, code, high, low)
+        self.error = None
+        self.coords = None
+        self._next = 0.0
+
+    # -- location ---------------------------------------------------------
+    def _first_line(self):
+        try:
+            for raw in self.path.read_text().splitlines():
+                line = raw.strip()
+                if line and not line.startswith("#"):
+                    return line
+        except OSError:
+            return None
+        return None
+
+    def _resolve(self):
+        """"45.07,-93.45" -> coordinates; a place name -> one geocode lookup.
+
+        Deliberately the same two forms the app accepts, so one file drives both
+        and the panel can never disagree with the screen about where you are.
+        """
+        line = self._first_line()
+        if not line:
+            self.error = "no weather_location.txt"
+            return None
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) >= 2:
+            try:
+                return (float(parts[0]), float(parts[1]))
+            except ValueError:
+                pass
+        # A name. Send the leading component only: "Maple Grove, MN, USA"
+        # geocodes reliably as "Maple Grove", and the qualifier matching the app
+        # does for the remainder is not worth reimplementing for a fallback.
+        try:
+            body = self._get(self.GEOCODE, name=parts[0], count=1, format="json")
+            hit = (body.get("results") or [None])[0]
+            if not hit:
+                self.error = "geocode found nothing for %r" % parts[0]
+                return None
+            return (float(hit["latitude"]), float(hit["longitude"]))
+        except Exception as exc:                      # noqa: BLE001 - see below
+            self.error = "geocode failed: %s" % exc
+            return None
+
+    # -- fetch ------------------------------------------------------------
+    def _get(self, url, **params):
+        import urllib.parse
+        import urllib.request
+        full = url + "?" + urllib.parse.urlencode(params)
+        with urllib.request.urlopen(full, timeout=self.TIMEOUT) as resp:
+            return json.loads(resp.read().decode())
+
+    def poll(self, now):
+        """One attempt, if due. Called from a background thread — never from the
+        render loop, which must keep its 0.25s tick even with the network down."""
+        if now < self._next:
+            return
+        self._next = now + self.RETRY
+        try:
+            if self.coords is None:
+                self.coords = self._resolve()
+                if self.coords is None:
+                    return
+            lat, lon = self.coords
+            body = self._get(self.FORECAST, latitude=lat, longitude=lon,
+                             current="temperature_2m,weather_code",
+                             daily="temperature_2m_max,temperature_2m_min",
+                             temperature_unit=self.settings.weather_units(),
+                             timezone="auto", forecast_days=1)
+            current = body["current"]
+            daily = body.get("daily") or {}
+            with self.lock:
+                self.data = (
+                    float(current["temperature_2m"]),
+                    int(current.get("weather_code") or 0),
+                    (daily.get("temperature_2m_max") or [None])[0],
+                    (daily.get("temperature_2m_min") or [None])[0],
+                )
+                self.error = None
+            self._next = now + self.REFRESH
+        # Every failure mode here is the same failure — no data this time — and
+        # they are all transient: no DNS at boot, no route, a 503, malformed
+        # JSON. The panel's job is to fall back to the clock, not to crash a
+        # thread the render loop depends on.
+        except Exception as exc:                      # noqa: BLE001
+            with self.lock:
+                self.error = str(exc)
+
+    def snapshot(self):
+        with self.lock:
+            return self.data
+
+
+def weather_thread(weather):
+    while True:
+        weather.poll(time.monotonic())
+        time.sleep(5)
 
 
 # ---------------------------------------------------------------------------
@@ -471,6 +825,7 @@ class State:
         self.lock = threading.Lock()
         self.view = ""
         self.channel = ""
+        self.label = ""
         self.position_ms = 0
         self.playing = False
 
@@ -483,6 +838,15 @@ class State:
                 # the user is three screens away.
                 if module_folder(self.view) != "hdhomerun":
                     self.channel = ""
+                # Same reasoning for the highlighted row: it belongs to the list
+                # that was on screen. The hook sends view and label in ONE
+                # message so the two can never be applied out of order — this
+                # server is threaded, and a label arriving just after the view
+                # that invalidated it would stick until the next keypress.
+                if "label" not in msg:
+                    self.label = ""
+            if "label" in msg:
+                self.label = str(msg["label"] or "")
             if "channel" in msg:
                 self.channel = str(msg["channel"] or "")
             if "position_ms" in msg:
@@ -494,39 +858,53 @@ class State:
 
     def snapshot(self):
         with self.lock:
-            return dict(view=self.view, channel=self.channel,
+            return dict(view=self.view, channel=self.channel, label=self.label,
                         position_ms=self.position_ms, playing=self.playing)
 
 
-def render(state, settings, now):
-    """Decide what the panel shows. Returns (text, colon) — text is what the
-    digits spell, colon is drawn separately because it is not a digit.
+def render(state, settings, weather, now):
+    """Decide what the panel shows. Returns a scene: ("digits", (text, colon)),
+    ("label", text) or ("weather", (temp, code, high, low)).
 
     Priority order, and each rung is a deliberate choice:
-      setup > channel > elapsed > clock > blank
-    HDHomeRun sits on the channel rung even while playing: live TV has no
-    elapsed time worth showing, and the channel is the thing you glance down for.
+      menu label > setup > channel > weather > elapsed > clock > blank
+
+    The menu label leads because it is the only rung that is *feedback* — it
+    changes as the user presses a key, and a panel that lags the keypress is
+    worse than one that says nothing. HDHomeRun sits on the channel rung even
+    while playing: live TV has no elapsed time worth showing, and the channel is
+    the thing you glance down for.
     """
     if not settings.enabled():
-        return "", False
+        return ("digits", ("", False))
 
     snap = state.snapshot()
     view = snap["view"]
-
-    if view in SETTINGS_VIEWS:
-        return "StP", False
-
     folder = module_folder(view)
     shown = settings.module_shown(folder)
 
+    # Only for the app's own screens. A module's internal lists (the channel
+    # list, a playlist) have something better to say, and their highlighted row
+    # is usually far too long for a front panel anyway.
+    if snap["label"] and not folder:
+        return ("label", snap["label"])
+
+    if view in SETTINGS_VIEWS:
+        return ("label", "SETUP")
+
     if shown and snap["channel"]:
-        return snap["channel"], False
+        return ("digits", (snap["channel"], False))
+
+    if shown and folder == "weather":
+        current = weather.snapshot() if weather else None
+        if current:
+            return ("weather", current)
 
     if shown and snap["playing"]:
         # No pause state to show: MpvController keeps mpv's pause flag private
         # (MpvController.h:132) and publishes no signal for it. Pausing simply
         # freezes the digits, which is what a VCR does anyway.
-        return format_elapsed(snap["position_ms"]), int(now) % 2 == 0
+        return ("digits", (format_elapsed(snap["position_ms"]), int(now) % 2 == 0))
 
     if settings.idle_clock():
         stamp = datetime.now()
@@ -534,9 +912,31 @@ def render(state, settings, now):
         # 12-hour blanks the leading zero the way a clock radio does; 24-hour
         # keeps it, so 09:05 stays four digits.
         text = ("%02d:%02d" if settings.clock_24h() else "%2d:%02d") % (hour, stamp.minute)
-        return text, int(now) % 2 == 0
+        return ("digits", (text, int(now) % 2 == 0))
 
-    return "", False
+    return ("digits", ("", False))
+
+
+def render_scene(scene, ghost=False, shift=(0, 0)):
+    kind, payload = scene
+    if kind == "weather":
+        return render_weather_frame(*payload, ghost=ghost, shift=shift)
+    if kind == "label":
+        return render_label_frame(payload, shift=shift)
+    text, colon = payload
+    return render_frame(encode(text), colon, ghost, shift)
+
+
+def scene_text(scene):
+    """What /status reports, and therefore what the module's status screen
+    shows. One readable string per scene, whatever the scene draws."""
+    kind, payload = scene
+    if kind == "weather":
+        temp, code, high, low = payload
+        return "%d' %s" % (round(temp), WMO.get(code, ""))
+    if kind == "label":
+        return payload
+    return payload[0]
 
 
 # ---------------------------------------------------------------------------
@@ -548,7 +948,8 @@ class Handler(BaseHTTPRequestHandler):
     state = None
     settings = None
     display = None
-    current = ("", False)
+    weather = None
+    current = ("digits", ("", False))
 
     protocol_version = "HTTP/1.1"
 
@@ -588,11 +989,12 @@ class Handler(BaseHTTPRequestHandler):
         if self.path != "/status":
             self._reply(404)
             return
-        text, colon = Handler.current
+        kind, _payload = Handler.current
         body = dict(Handler.state.snapshot(),
-                    text=text, colon=colon,
+                    text=scene_text(Handler.current), kind=kind,
                     connected=bool(Handler.display and Handler.display.connected),
-                    error=(Handler.display.error if Handler.display else "i2c not opened"))
+                    error=(Handler.display.error if Handler.display else "i2c not opened"),
+                    weather_error=(Handler.weather.error if Handler.weather else None))
         self._reply(200, json.dumps(body).encode())
 
 
@@ -632,14 +1034,17 @@ def serve():
     display = Display()
     settings = Settings()
     state = State()
+    weather = Weather(settings)
     display.set_brightness(settings.brightness())
 
     Handler.state = state
     Handler.settings = settings
     Handler.display = display
+    Handler.weather = weather
 
     httpd = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    threading.Thread(target=weather_thread, args=(weather,), daemon=True).start()
     print("[segdisplay] listening on 127.0.0.1:%d, display %s"
           % (PORT, "ready" if display.connected else "ABSENT"))
 
@@ -652,15 +1057,19 @@ def serve():
             if settings.reload():
                 display.set_brightness(settings.brightness())
             now = time.time()
-            text, colon = render(state, settings, now)
-            Handler.current = (text, colon)
+            scene = render(state, settings, weather, now)
+            Handler.current = scene
+            ghost = settings.ghost_segments()
             shift = SHIFT_STEPS[int(now // SHIFT_SECONDS) % len(SHIFT_STEPS)]
-            try:
-                display.show(encode(text), colon, settings.ghost_segments(), shift)
-            except ValueError as exc:
-                # A channel number that will not fit is a bug, not a crash.
-                print("[segdisplay] %s" % exc, file=sys.stderr)
-                display.show(encode("----"), False, settings.ghost_segments(), shift)
+            key = (scene, ghost, shift)
+            if key != display.last:
+                try:
+                    buf = render_scene(scene, ghost, shift)
+                except ValueError as exc:
+                    # A channel number that will not fit is a bug, not a crash.
+                    print("[segdisplay] %s" % exc, file=sys.stderr)
+                    buf = render_frame(encode("----"), False, ghost, shift)
+                display.blit(buf, key)
             time.sleep(0.25)
     except KeyboardInterrupt:
         pass
@@ -676,7 +1085,8 @@ def main():
 
     if args[0] in ("-h", "--help"):
         print(__doc__)
-        print("usage: segdisplay.py [--probe | --test | --show TEXT [--ghost] | --clear]")
+        print("usage: segdisplay.py [--probe | --test | --show TEXT [--ghost]"
+              " | --label TEXT | --weather | --clear]")
         return 0
 
     if args[0] == "--probe":
@@ -694,6 +1104,27 @@ def main():
             display_test(display)
         elif args[0] == "--clear":
             display.clear()
+        elif args[0] == "--label":
+            if len(args) < 2:
+                print("--label needs a value", file=sys.stderr)
+                return 2
+            display.blit(render_label_frame(args[1]), ("label", args[1]))
+            print("showing %r" % args[1])
+            return 0
+        elif args[0] == "--weather":
+            # Live, not canned: this is the mode that answers "is the location
+            # file readable and does this box have a route to open-meteo",
+            # which is most of what can go wrong with the weather screen.
+            weather = Weather(Settings())
+            weather.poll(time.monotonic())
+            data = weather.snapshot()
+            if not data:
+                print("no weather: %s" % weather.error, file=sys.stderr)
+                return 1
+            display.blit(render_weather_frame(*data), ("weather", data))
+            print("showing %d' %s (H%s L%s)"
+                  % (round(data[0]), WMO.get(data[1], "?"), data[2], data[3]))
+            return 0
         elif args[0] == "--show":
             if len(args) < 2:
                 print("--show needs a value", file=sys.stderr)
@@ -708,7 +1139,9 @@ def main():
             print("unknown option %r" % args[0], file=sys.stderr)
             return 2
     finally:
-        if args[0] != "--show":
+        # --show/--label/--weather return early and deliberately leave the frame
+        # up; only the modes that fall through here should blank the panel.
+        if args[0] not in ("--show", "--label", "--weather"):
             display.close()
     return 0
 

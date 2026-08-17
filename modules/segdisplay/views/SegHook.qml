@@ -79,8 +79,87 @@ Item {
         return parts.slice(-2).join("/")
     }
 
+    // Set by Main.qml's patch. The hook needs the Loader itself, not just its
+    // source, to read the highlighted row out of whatever list is on screen.
+    property var appLoader: null
+    property string view: ""
+    property var _list: null
+
     function setView(url) {
-        post({ view: relativeView(url) })
+        hook.view = relativeView(url)
+        hook.findList()
+        hook.report()
+    }
+
+    // View and label travel together in one message, always. The daemon's HTTP
+    // server is threaded, so two separate posts can be applied in either order,
+    // and a label landing after the view that invalidated it would sit on the
+    // panel until the next keypress.
+    function report() {
+        post({ view: hook.view, label: hook.currentLabel() })
+    }
+
+    // 240-MP's own screens are all "a ListView of things with a name" — the
+    // module list, the settings list, a module's settings. None of them exposes
+    // the highlighted row to the outside, and their ids are private to their
+    // component, so the only way in is to walk the item tree. Deliberately
+    // duck-typed rather than matched by id or type name: it then also works on
+    // upstream screens that do not exist yet, and simply finds nothing (and
+    // shows nothing) on the ones that are not lists.
+    function findList() {
+        hook._list = hook.appLoader ? hook.search(hook.appLoader.item, 0) : null
+    }
+
+    function search(obj, depth) {
+        if (!obj || depth > 8)
+            return null
+        if (obj.currentIndex !== undefined && obj.model !== undefined
+                && obj.model && obj.model.length !== undefined && obj.visible !== false)
+            return obj
+        var kids = obj.children
+        if (!kids)
+            return null
+        for (var i = 0; i < kids.length; ++i) {
+            var found = hook.search(kids[i], depth + 1)
+            if (found)
+                return found
+        }
+        return null
+    }
+
+    // Every list in the app names its rows differently — the module list uses
+    // "name", the settings lists use "label". Try each rather than special-case
+    // the screens by path.
+    function currentLabel() {
+        var list = hook._list
+        if (!list || list.currentIndex < 0 || !list.model
+                || list.currentIndex >= list.model.length)
+            return ""
+        var row = list.model[list.currentIndex]
+        if (row === undefined || row === null)
+            return ""
+        if (typeof row === "string")
+            return row
+        return String(row.name || row.label || row.title || row.text || "")
+    }
+
+    // The Loader creates its item *after* source changes, so this — not
+    // setView — is when the new screen's list actually exists to be found.
+    Connections {
+        target: hook.appLoader
+        ignoreUnknownSignals: true
+        function onItemChanged() {
+            hook.findList()
+            hook.report()
+        }
+    }
+
+    // Rebound every time findList() runs, so the label follows the cursor
+    // without polling.
+    Connections {
+        target: hook._list
+        ignoreUnknownSignals: true
+        function onCurrentIndexChanged() { hook.report() }
     }
 
     Connections {

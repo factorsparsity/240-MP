@@ -6,10 +6,17 @@ cable box's front panel shows something real:
 
 | Where you are | What the panel shows |
 |---|---|
+| Any of the app's menus | the highlighted row — `HDHOMERUN`, `PLEX`, `COLOR SCHEME` |
+| The setup screen, nothing highlighted | `SETUP` |
 | HDHomeRun (browsing or watching) | the channel, decimal point and all — `9.1`, `12.10` |
+| Weather | temperature in big digits, condition and hi/lo beside it |
 | Any other playback module | elapsed time, `MM:SS` under an hour, `H:MM` over it |
-| The setup screen | `StP` |
 | Anywhere else | the time of day, colon blinking |
+
+Priority when several could apply: **menu label > setup > channel > weather >
+elapsed > clock > blank**. The menu label leads because it is the only rung that
+is feedback rather than status — it answers a keypress, and a panel that lags
+the keypress is worse than one that says nothing.
 
 Every module can be switched off individually in
 **Settings → Modules → Front Panel**.
@@ -28,6 +35,28 @@ the LED board could not do:
 - **Burn-in protection.** The whole layout shifts by up to two pixels every five
   minutes. An idle clock is exactly the static image that burns an OLED, and
   this box is meant to sit powered on.
+- **Words.** Menu labels, `SETUP` and weather conditions get a real 5x7 font,
+  because seven segments can spell almost nothing. Anything that is
+  fundamentally a *number* — channel, clock, timer, temperature — still gets the
+  7-segment glyphs; that is the panel's character, not a limitation to route
+  around.
+
+## Weather
+
+The daemon fetches its own conditions from open-meteo (no API key) using the
+first line of `weather_location.txt` — the same file the app's weather module
+reads, so the panel can never disagree with the screen about where you are. It
+follows that module's Metric/US setting too.
+
+It has to fetch its own: 240-MP keeps weather data in C++ (`WeatherBackend`)
+with nothing reachable from module QML, and the weather module's background
+music runs on a private mpv, so not even the elapsed-timer rung fires there.
+The upside is that the panel needs no patch to upstream's weather views, which
+an upgrade would revert.
+
+Layout is a big 7-segment temperature (three cells, right-aligned, so `-12` and
+`100` both fit without the layout moving) then a degree ring, then two rows of
+text: the WMO condition shortened to 11 characters, and `H80 L66`.
 
 ## Wiring
 
@@ -72,9 +101,16 @@ file. So:
   reads its own settings straight out of 240-MP's `config.json`, so the
   per-module toggles need no plumbing.
 - `views/SegHook.qml` is loaded once from `Main.qml` and POSTs the current view
-  path plus mpv's playback position. It uses `mpvController`'s existing
-  `positionChanged` / `playbackEnded` signals, which is why every playback
-  module — including ones this project did not write — gets a timer for free.
+  path, the highlighted menu row, and mpv's playback position. It uses
+  `mpvController`'s existing `positionChanged` / `playbackEnded` signals, which
+  is why every playback module — including ones this project did not write —
+  gets a timer for free.
+- The highlighted row is found by walking the item tree under `moduleLoader.item`
+  for anything with a `currentIndex` and an array `model`, then reading
+  `name`/`label`/`title`/`text` off the current row. Duck-typed on purpose: the
+  app's lists keep their ids private to their own component, and this way a
+  screen upstream adds later works with no change here — and one that is not a
+  list simply yields nothing.
 - `views/HdhrService.qml` (the HDHomeRun module) POSTs the channel number as the
   cursor moves and when a channel is tuned.
 - `views/Root.qml` is a status screen: is the daemon up, did the device answer,
@@ -95,10 +131,22 @@ to 99 of the 128 columns; the slack is what the burn-in shift moves into.
 ```bash
 python3 segdisplay.py --probe            # does 0x3C answer?
 python3 segdisplay.py --test             # all pixels, each segment, 8.8.8.8 + colon
-python3 segdisplay.py --show 12.10       # or "StP", "03:47"; add --ghost
+python3 segdisplay.py --show 12.10       # or "03:47"; add --ghost
+python3 segdisplay.py --label HDHOMERUN  # a menu label, auto-scaled
+python3 segdisplay.py --weather          # live fetch — proves the file and the route
 python3 segdisplay.py --clear
 journalctl -u segdisplay.service -f
 ```
+
+These write straight to the bus while the daemon is also running, so the frame
+they leave stays up only until the daemon's next scene change. Harmless — I2C
+tolerates the interleaving — but it is why `--show` appears to "stick" and then
+vanish a minute later.
+
+`--weather` is the one that isolates weather faults: it prints the reading, or
+the reason there is none. `/status` also carries `weather_error`, and a fresh
+boot legitimately shows `Temporary failure in name resolution` until the network
+is up — the poller retries every 60s.
 
 `--test` starts with an all-pixels frame on purpose: it answers "is the whole
 128x32 area alive and the right way up" before the glyph geometry is in play.

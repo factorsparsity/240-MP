@@ -37,7 +37,14 @@ BLOCK_LOADER = """    // segdisplay-hook BEGIN — front-panel reporter (modules
         // callback placed at this point was observed never running at all.
         // This fires the initial view; moduleLoader's onSourceChanged below
         // cannot, because it runs before this Loader has an item.
-        onLoaded: if (item) item.setView(String(moduleLoader.source))
+        //
+        // appLoader is the Loader itself, not its source: the hook reads the
+        // highlighted row out of whichever list is on screen, and only the
+        // Loader's `item` can lead it there.
+        onLoaded: if (item) {
+            item.appLoader = moduleLoader
+            item.setView(String(moduleLoader.source))
+        }
     }
     // segdisplay-hook END
 
@@ -50,6 +57,33 @@ BLOCK_SOURCE = """        // segdisplay-hook BEGIN — the de facto "what screen
         onSourceChanged: if (segHook.item) segHook.item.setView(String(source))
         // segdisplay-hook END
 """
+
+
+def strip(text):
+    """Remove any previously inserted block, so a changed patch can be applied
+    to an already-patched file. Without this the marker check below turns every
+    later change to the hook's wiring into a silent no-op on a box that was
+    patched once, months ago — the exact failure this script exists to shout
+    about."""
+    out = []
+    skipping = False
+    drop_blank = False
+    for line in text.splitlines(keepends=True):
+        if "%s BEGIN" % MARKER in line:
+            skipping = True
+            continue
+        if "%s END" % MARKER in line:
+            skipping = False
+            drop_blank = True
+            continue
+        if skipping:
+            continue
+        if drop_blank:
+            drop_blank = False
+            if line.strip() == "":
+                continue   # the blank line the inserted block brought with it
+        out.append(line)
+    return "".join(out)
 
 
 def patch(text):
@@ -73,13 +107,14 @@ def main():
     with open(path) as fh:
         text = fh.read()
 
-    if MARKER in text:
+    updated = patch(strip(text))
+    if updated == text:
         print("already patched")
         return 0
 
     with open(path, "w") as fh:
-        fh.write(patch(text))
-    print("patched %s" % path)
+        fh.write(updated)
+    print("%s %s" % ("re-patched" if MARKER in text else "patched", path))
     return 0
 
 
