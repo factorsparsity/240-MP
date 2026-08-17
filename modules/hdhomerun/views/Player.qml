@@ -73,7 +73,13 @@ FocusScope {
 
     // Forward keys to mpv so its OSC works on the Pi, where the Qt app owns the
     // keyboard and relays via sendKey. On desktop mpv has focus and handles these
-    // itself. Same set LivePlayer.qml forwards.
+    // itself.
+    //
+    // All eight keys upstream's players forward (plex/views/LivePlayer.qml,
+    // local_files/views/Player.qml). The first version of this file forwarded
+    // only four and claimed in a comment to match — with no LEFT/RIGHT/ENTER
+    // there is no way to move around the OSC, so Crop was unreachable during a
+    // live channel while it worked everywhere else in the app.
     Keys.onPressed: function(event) {
         if (event.key === Qt.Key_Escape || event.key === Qt.Key_Back) {
             // Quit mpv; onPlaybackEnded drives the teardown + goBack.
@@ -87,6 +93,18 @@ FocusScope {
             event.accepted = true
         } else if (event.key === Qt.Key_Down) {
             mpvController.sendKey("DOWN")
+            event.accepted = true
+        } else if (event.key === Qt.Key_Left) {
+            mpvController.sendKey("LEFT")
+            event.accepted = true
+        } else if (event.key === Qt.Key_Right) {
+            mpvController.sendKey("RIGHT")
+            event.accepted = true
+        } else if (event.key === Qt.Key_Space) {
+            mpvController.sendKey("SPACE")
+            event.accepted = true
+        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            mpvController.sendKey("ENTER")
             event.accepted = true
         }
     }
