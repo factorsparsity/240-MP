@@ -29,6 +29,32 @@ FocusScope {
 
     focus: true
 
+    function _dataRoot() {
+        var home = appCore.homePath()
+        return Qt.platform.os === "osx"
+            ? home + "/Library/Application Support/240-MP"
+            : home + "/.local/share/240-MP"
+    }
+
+    // Filesystem path of this module's directory, derived from this QML file's
+    // own URL — the module can be installed under any appRoot.
+    function _moduleDir() {
+        var u = Qt.resolvedUrl(".").toString()      // file:///…/modules/hdhomerun/views/
+        u = u.replace(/^file:\/\//, "").replace(/\/+$/, "")
+        return u.replace(/\/views$/, "")
+    }
+
+    // Per-channel crop memory. The script does the remembering; all this side
+    // has to do is name the channel. --script-opts-append, never --script-opts:
+    // MpvController has already built that list and a second one replaces it.
+    function cropArgs() {
+        return [
+            "--script=" + _moduleDir() + "/scripts/hdhr-crop.lua",
+            "--script-opts-append=hdhr-crop-store=" + _dataRoot() + "/hdhr_crop.txt",
+            "--script-opts-append=hdhr-crop-channel=" + channel.guideNumber
+        ]
+    }
+
     // tune_channel resolves through onStreamUrlReady, which loads the stream
     // into mpv. It resolves from the already-loaded lineup, so this is fast.
     function tune() {
@@ -50,8 +76,12 @@ FocusScope {
 
         function onStreamUrlReady(url) {
             playerRoot.streamUrl = url
-            // Live TS: start at 0, default audio track, no subtitles.
-            mpvController.loadAndPlay(url, 0, 0, -1)
+            // Live TS: start at 0, default audio track, no subtitles. The long
+            // form is required only because extraArgs is the 17th parameter —
+            // everything between is loadAndPlay's own default.
+            mpvController.loadAndPlay(url, 0, 0, -1, [], [], false, -1, 0.0,
+                                      "", false, "", false, [], 0.0, false,
+                                      playerRoot.cropArgs())
         }
 
         function onErrorOccurred(msg) {
