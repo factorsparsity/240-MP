@@ -31,6 +31,34 @@ Make changes on the feature branch, then `git checkout test-integration && git m
    (generic "current screen / label / playback" from `Main.qml` or AppCore)
    as its own PR; rework `segdisplay` and `announceChannel` onto it.
 
+## 2026-10-20 (night) — tuner fallback, busy-tuner notice, CRT aspect
+
+**"Channel won't play" was both tuners in use**, not a bug: tuner .94 had one
+tuner on another LAN client (10.0.1.96) and one on the Pi's own boot-time
+`epg-scan.timer` scan (OnBootSec=5min). The device answers 503 and mpv only says
+"failed". Now (on `hdhomerun-module`):
+- Before tuning, `status.json` is checked (a busy tuner has a `TargetIP`), in
+  order: Tuner, **Backup Tuner** (new setting, default Automatic), then every
+  other discovered device carrying the channel (lineups fetched after discovery).
+  Non-transcoding devices always sort last (Larry's call: full-rate MPEG-2 is
+  software-decoded on the Pi). No ordered-list setting type exists upstream,
+  hence two list_single settings rather than a full priority list.
+- None free: the guide shows TUNERS BUSY / NO TUNER without trying a stream. A
+  stream that still fails shows TUNERS BUSY / PLAY FAILED (status.json re-check).
+- The DUAL's firmware has no `status.json` (404): treat 404 as "up, unknown"
+  and try it, or it is never used.
+- `hdhr.discover_devices()` is called directly, not `discoverDevices()`: the
+  latter's timeout raises errorOccurred, which would end playback.
+
+**CRT aspect.** Composite NTSC is fixed 720x480 shown at 4:3 (pixel aspect
+0.889). `framebuffer_width/height=640x480` in config.txt does nothing here: Qt
+eglfs draws straight to the DRM plane (still 720x480). Reverted. Fix for video is
+`monitoraspect=4:3` in the Pi's `~/.config/mpv/mpv.conf` (mpv assumed square
+pixels: everything ~11% squeezed). Menus were fine as-is per Larry. Side effect:
+video now fills the raster into the overscan, so Music TV's title card and bug
+(5-7.5% margins) were cut off; moved to 10% title-safe. mpv's OSD size is
+unchanged by monitoraspect (verified), only glyph width changes.
+
 ## 2026-10-20 (late) — Pi GPU crash: root cause + workaround
 
 **Mesa segfaults when a shader effect samples an Image that lives in Qt's
