@@ -97,6 +97,62 @@ Data and network:
 - The only network traffic is the tuner on the LAN, plus HDHomeRun's discovery
   endpoint when the picker opens.
 
+## Setup
+
+1. **Enable the module** under **Settings → HDHomeRun**.
+2. **Allow local file reads for the guide.** The app needs
+   `QML_XHR_ALLOW_FILE_READ=1` in its environment. Without it, the guide shows
+   "NO GUIDE DATA" even with a full cache.
+   - With the `install.sh` autostart service, add a drop-in:
+     ```bash
+     sudo mkdir -p /etc/systemd/system/240mp.service.d
+     printf '[Service]\nEnvironment=QML_XHR_ALLOW_FILE_READ=1\n' \
+       | sudo tee /etc/systemd/system/240mp.service.d/hdhomerun.conf
+     sudo systemctl daemon-reload
+     ```
+   - When running by hand: `QML_XHR_ALLOW_FILE_READ=1 240mp`.
+3. **Pick a tuner.** On first open the tuner picker appears by itself, filled
+   from HDHomeRun's discovery service. Press **D** in the channel list to change
+   it later.
+   - Discovery needs internet. Offline, set `device_id` under
+     `modules → com.240mp.hdhomerun` in `config.json`.
+4. **Install the guide scanner units (Linux).** The units in `scripts/` carry
+   placeholders that need filling in before install:
+   - `@USER@`: the user that runs 240-MP
+   - `@MODULE_DIR@`: the module's path
+   - `@HOME@`: that user's home
+
+   For a release install:
+   ```bash
+   MOD=/opt/240mp/share/240mp/modules/hdhomerun
+   for u in epg-rescan.path epg-rescan.service epg-scan.service epg-scan.timer; do
+     sed -e "s|@USER@|$USER|g" -e "s|@MODULE_DIR@|$MOD|g" -e "s|@HOME@|$HOME|g" \
+       "$MOD/scripts/$u" | sudo tee "/etc/systemd/system/$u" >/dev/null
+   done
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now epg-rescan.path epg-scan.timer
+   ```
+   - `epg-rescan.path` makes the **Rescan Guide Data** setting work.
+   - `epg-scan.timer` refreshes the guide nightly.
+5. **Run the first scan.** Turn on **Settings → HDHomeRun → Rescan Guide Data**.
+   The first scan takes about 90 minutes: one sweep of the RF band, then a
+   capture per multiplex. Later scans skip the sweep.
+   - On macOS there's no systemd, so run the scanner by hand:
+     ```bash
+     HDHOMERUN_IP=<tuner-ip> \
+     EPG_CACHE_PATH="$HOME/Library/Application Support/240-MP/epg_cache.json" \
+     python3 scripts/epg_scanner.py
+     ```
+6. **Optional:**
+   - **Video Quality** chooses the transcode profile. EXTEND models only; the
+     default is `internet480`.
+   - **Start In** chooses whether the guide or the channel list opens first.
+7. **Crop memory needs no setup.** Toggle CROP in the on-screen controls and the
+   channel remembers it. The values are stored in `hdhr_crop.txt` in the data
+   directory.
+
+The data directory is `~/.local/share/240-MP` on Linux and `~/Library/Application Support/240-MP` on macOS.
+
 ## AI involvement
 
 The code was written with Claude Code: the QML views, the PSIP parser, the
@@ -128,7 +184,7 @@ yield no listings (their PSIP fails CRC), and a Pi Zero W is too slow.
 
 ## Checklist
 
-- [ ] Changes work with remote-only navigation (up/down/left/right, enter, esc/backspace)
-- [ ] Handled sizing and positioning using the `root.sh` & `root.sw` properties (did not hardcode pixels) and kept CRT overscan in mind
-- [ ] Did not add tracking or analytics; only wrote settings to the local data directory if the change required storage
-- [ ] Follows the patterns in [ARCHITECTURE.md](https://github.com/anthonycaccese/240-MP/blob/main/ARCHITECTURE.md) and the principles in [CONTRIBUTING.md](https://github.com/anthonycaccese/240-MP/blob/main/CONTRIBUTING.md)
+- [x] Changes work with remote-only navigation (up/down/left/right, enter, esc/backspace)
+- [x] Handled sizing and positioning using the `root.sh` & `root.sw` properties (did not hardcode pixels) and kept CRT overscan in mind
+- [x] Did not add tracking or analytics; only wrote settings to the local data directory if the change required storage
+- [x] Follows the patterns in [ARCHITECTURE.md](https://github.com/anthonycaccese/240-MP/blob/main/ARCHITECTURE.md) and the principles in [CONTRIBUTING.md](https://github.com/anthonycaccese/240-MP/blob/main/CONTRIBUTING.md)

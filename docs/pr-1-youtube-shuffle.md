@@ -36,6 +36,24 @@ first video starts as fast as it does today.
 **Settings compatibility.** One new key. No existing keys are renamed, removed
 or re-typed.
 
+## Setup
+
+1. **Playlists.** This uses the YouTube module's existing playlist file. If you
+   don't already have one, create `youtube_playlists.txt` in the data directory.
+   The data directory is `~/.local/share/240-MP` on Linux and `~/Library/Application Support/240-MP` on macOS. Put one playlist per line, as a URL or a bare playlist ID.
+   A `Name |` prefix is optional, and `#` starts a comment:
+   ```
+   # my playlists
+   80s Hits | https://www.youtube.com/playlist?list=PLxxxxxxxxxxxx
+   PLyyyyyyyyyyyy
+   ```
+2. **Choose the behaviour** under **Settings → YouTube → Shuffle Playlists**:
+   - `Ask` (default): prompts each time a playlist opens.
+   - `Always` or `Never`: skips the prompt.
+3. **Keep yt-dlp current**, as for the rest of the YouTube module. An outdated
+   yt-dlp gets HTTP 403s from YouTube on many official uploads, and inside a
+   playlist mpv silently skips those entries.
+
 ## AI involvement
 
 The code was written with Claude Code, following the existing module's
@@ -60,7 +78,7 @@ Not tested on Windows, Steam Deck, or Pi 3/5.
 
 ## Checklist
 
-- [ ] Changes work with remote-only navigation (up/down/left/right, enter, esc/backspace)
-- [ ] Handled sizing and positioning using the `root.sh` & `root.sw` properties (did not hardcode pixels) and kept CRT overscan in mind
-- [ ] Did not add tracking or analytics; only wrote settings to the local data directory if the change required storage
-- [ ] Follows the patterns in [ARCHITECTURE.md](https://github.com/anthonycaccese/240-MP/blob/main/ARCHITECTURE.md) and the principles in [CONTRIBUTING.md](https://github.com/anthonycaccese/240-MP/blob/main/CONTRIBUTING.md)
+- [x] Changes work with remote-only navigation (up/down/left/right, enter, esc/backspace)
+- [x] Handled sizing and positioning using the `root.sh` & `root.sw` properties (did not hardcode pixels) and kept CRT overscan in mind
+- [x] Did not add tracking or analytics; only wrote settings to the local data directory if the change required storage
+- [x] Follows the patterns in [ARCHITECTURE.md](https://github.com/anthonycaccese/240-MP/blob/main/ARCHITECTURE.md) and the principles in [CONTRIBUTING.md](https://github.com/anthonycaccese/240-MP/blob/main/CONTRIBUTING.md)

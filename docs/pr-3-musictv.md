@@ -85,6 +85,71 @@ YouTube playlists.
 Everything the module writes stays in the data directory. The only network
 traffic is yt-dlp listing playlists and mpv fetching the streams.
 
+## Setup
+
+The data directory is `~/.local/share/240-MP` on Linux and `~/Library/Application Support/240-MP` on macOS.
+
+1. **Enable the module** under **Settings → Music TV**.
+2. **Keep yt-dlp current.** It's used both to list playlists and to play videos.
+   An outdated yt-dlp gets HTTP 403s on many official label uploads, and mpv
+   silently skips those entries, so the channel ends up playing only bumpers.
+   - The simplest setup is the release binary in `<data directory>/bin/yt-dlp`,
+     which the app prefers over `PATH`. Update it with `yt-dlp -U`.
+3. **Add music playlists** to `musictv_playlists.txt` in the data directory. This
+   file is required. Use one YouTube playlist (or single video) per line. A
+   `Name |` prefix is optional, and `#` starts a comment:
+   ```
+   # music videos
+   80s Hits | https://www.youtube.com/playlist?list=PLxxxxxxxxxxxx
+   90s Hits | https://www.youtube.com/playlist?list=PLyyyyyyyyyyyy
+   ```
+4. **Add bumpers (optional)** to `musictv_bumpers.txt`. It uses the same format,
+   and single video URLs are handy here. Keep bumpers short: anything there plays
+   between music videos.
+5. **Add title-card extras (optional)** in `musictv_metadata.json`. It's keyed by
+   video ID, and any field set there wins over what's parsed from the title:
+   ```json
+   {"UG3VcCAlUgE": {"album": "Purple Rain", "label": "Warner Bros. Records", "director": "Prince"}}
+   ```
+6. **Install the title font** into your user font folder. mpv draws the card, so
+   the font has to be visible to mpv:
+   ```bash
+   # Linux
+   mkdir -p ~/.local/share/fonts
+   cp /opt/240mp/share/240mp/modules/musictv/assets/fonts/*.ttf ~/.local/share/fonts/
+   fc-cache -f
+   # macOS
+   cp modules/musictv/assets/fonts/*.ttf ~/Library/Fonts/
+   ```
+   - To use Kabel, install your own licensed copy the same way, then set
+     **Settings → Music TV → Title Font** to `Kabel`.
+7. **Add screen bugs (optional).**
+   - Create a `musictv_bugs/` folder in the data directory and drop in PNGs with
+     **real transparency**. An opaque image draws as a solid box, and the
+     converter warns about it.
+   - Each PNG has to be converted once, into the raw image format mpv's overlay
+     needs:
+     ```bash
+     python3 /opt/240mp/share/240mp/modules/musictv/scripts/musictv_bugs.py
+     ```
+   - To convert new PNGs automatically on Linux, install the bug units with the
+     same placeholder substitution as the HDHomeRun units:
+     ```bash
+     MOD=/opt/240mp/share/240mp/modules/musictv
+     for u in musictv-bugs.path musictv-bugs.service; do
+       sed -e "s|@USER@|$USER|g" -e "s|@MODULE_DIR@|$MOD|g" -e "s|@HOME@|$HOME|g" \
+         "$MOD/scripts/$u" | sudo tee "/etc/systemd/system/$u" >/dev/null
+     done
+     sudo systemctl daemon-reload && sudo systemctl enable --now musictv-bugs.path
+     ```
+   - Removing a PNG takes it out of the rotation.
+8. **Open Music TV.**
+   - The first open builds the playlist cache, showing "UPDATING PLAYLISTS..."
+     for a few seconds.
+   - After editing any of the files above, the next open picks up the change.
+     The cache also refreshes daily.
+   - To force a rebuild, delete `musictv_cache.json`.
+
 ## AI involvement
 
 The code was written with Claude Code: the QML views, the C++ backend, the mpv
@@ -114,7 +179,7 @@ Not tested on Windows, Steam Deck, or Pi 3/5.
 
 ## Checklist
 
-- [ ] Changes work with remote-only navigation (up/down/left/right, enter, esc/backspace)
-- [ ] Handled sizing and positioning using the `root.sh` & `root.sw` properties (did not hardcode pixels) and kept CRT overscan in mind
-- [ ] Did not add tracking or analytics; only wrote settings to the local data directory if the change required storage
-- [ ] Follows the patterns in [ARCHITECTURE.md](https://github.com/anthonycaccese/240-MP/blob/main/ARCHITECTURE.md) and the principles in [CONTRIBUTING.md](https://github.com/anthonycaccese/240-MP/blob/main/CONTRIBUTING.md)
+- [x] Changes work with remote-only navigation (up/down/left/right, enter, esc/backspace)
+- [x] Handled sizing and positioning using the `root.sh` & `root.sw` properties (did not hardcode pixels) and kept CRT overscan in mind
+- [x] Did not add tracking or analytics; only wrote settings to the local data directory if the change required storage
+- [x] Follows the patterns in [ARCHITECTURE.md](https://github.com/anthonycaccese/240-MP/blob/main/ARCHITECTURE.md) and the principles in [CONTRIBUTING.md](https://github.com/anthonycaccese/240-MP/blob/main/CONTRIBUTING.md)
