@@ -16,3 +16,7 @@ Thumbs.db
 /.appimage-tools
 /.mpv-build
 /*.AppImage
+
+# Python bytecode (module scripts run in place)
+__pycache__/
+*.pyc
