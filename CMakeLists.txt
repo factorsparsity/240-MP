@@ -55,6 +55,7 @@ add_executable(240mp
     src/modules/emby/EmbyBackend.cpp
     src/modules/ambient_mode/AmbientModeBackend.cpp
     src/modules/youtube/YouTubeBackend.cpp
+    src/modules/musictv/MusicTvBackend.cpp
     src/modules/nfc_reader/NfcReaderBackend.cpp
     src/modules/nfc_reader/PcscDriver.cpp
     src/modules/nfc_reader/Pn532SerialDriver.cpp

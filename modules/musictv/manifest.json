@@ -27,6 +27,14 @@
       "description": "The artist/song card in the style of a 1980s music-video channel, shown at the start and again near the end of each music video."
     },
     {
+      "key": "title_font",
+      "label": "Title Font",
+      "type": "list_single",
+      "options": ["Josefin Sans", "Kabel"],
+      "default": "Josefin Sans",
+      "description": "Font for the title card. Kabel is not included; install your own copy into your user fonts folder to use it."
+    },
+    {
       "key": "show_screenbug",
       "label": "Show Screen Bug",
       "type": "toggle",
