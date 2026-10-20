@@ -13,9 +13,9 @@ PR. Newest entry first.
 
 | Branch | What | State |
 |---|---|---|
-| `hdhomerun-module` | New module: HDHomeRun live TV + ATSC PSIP guide. Pure QML (`HdhrService.qml`), Python EPG scanner + systemd units. | Tested on Mac (guide, tune) before the Aug 16 port; re-test crop memory and guide return. |
-| `musictv-module` | New module: 80s music-video channel from YouTube playlists. `MusicTvBackend` (C++) + QML + mpv Lua overlay. | Tested on Mac. **Not yet on Pi** since the backend was added. |
-| `youtube-playlist-shuffle` | Adds Play in order / Shuffle to the existing YouTube Playlists view + `shuffle_playlists` setting. Playlists themselves are upstream, not ours. | Builds; shuffle not yet exercised. |
+| `hdhomerun-module` | New module: HDHomeRun live TV + ATSC PSIP guide. Pure QML (`HdhrService.qml`), Python EPG scanner + systemd units. | Tested on Pi 2026-10-20 (incl. Aug 16 port). |
+| `musictv-module` | New module: 80s music-video channel from YouTube playlists. `MusicTvBackend` (C++) + QML + mpv Lua overlay. | Tested on Mac and Pi 2026-10-20. |
+| `youtube-playlist-shuffle` | Adds Play in order / Shuffle to the existing YouTube Playlists view + `shuffle_playlists` setting. Playlists themselves are upstream, not ours. | Tested on Pi 2026-10-20. |
 | `frontpanel-module` | New module: Front Panel (SSD1306 OLED as 7-segment), `modules/segdisplay/`, plus HDHomeRun's `announceChannel` panel call. Based on `hdhomerun-module`. Needs the `Main.qml` hook (`scripts/patch_main_qml.py` at deploy). **Not a PR yet** — aux-display hook to be proposed upstream first. | Not tested since the port (Pi + OLED hardware only). |
 | `test-integration` | Local test only: main + all three merged. Never PR this. Rebuild it after changing any feature branch. | |
 
@@ -37,6 +37,8 @@ Make changes on the feature branch, then `git checkout test-integration && git m
 fails host-key check — use the hostname). Pi 4, 1 GB, Debian 13, Qt 6.8 dev
 packages present. Runs the `install.sh` layout: `/opt/240mp/{bin,share/240mp}`,
 launched by `/usr/local/bin/240mp` from `240mp.service`.
+
+**Result:** Larry tested on the Pi the same evening — all modules working.
 
 **How it was deployed** (repeatable): clone the fork's `test-integration` to
 `~/240-MP-src`; `cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=~/240mp-stage`;
