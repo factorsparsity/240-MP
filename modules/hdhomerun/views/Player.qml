@@ -93,6 +93,8 @@ FocusScope {
 
         function onPlaybackEnded(finalPositionMs, finalDurationMs, reason) {
             // Any end (user quit, stream failure, eof) returns to the channel list.
+            if (reason === "failed")
+                hdhr.reportPlayFailure()
             teardown()
             goBack()
         }
