@@ -76,8 +76,10 @@ programme guide built from the broadcast's own PSIP data.
     `transcode` capability (via `apply_slot`) that gates Video Quality.
 - **Priority as two settings.** There's no ordered-list setting type, so the
   tuner order is Tuner plus Backup Tuner, with the rest in discovery order. That
-  covers a full order for up to three tuners. Older firmware (the DUAL here) has
-  no `status.json`; a 404 is taken as "up, can't say", and that tuner is tried.
+  covers a full order for up to three tuners.
+- **Legacy tuners are left out.** Models with `"Legacy":1` in `discover.json`
+  (the original DUAL, for one) have no HTTP streaming or local `lineup.json`, so
+  discovery skips them rather than offering a tuner that can never play.
 - **The guide scanner stays in Python**, standard library only (no pip install),
   run as a child process the way yt-dlp is. Every scan goes through one entry
   point, `epg-rescan-trigger.py`, which scans the configured tuner and holds a
@@ -171,18 +173,19 @@ comparison. This description was drafted with Claude Code, and I edited it.
 What I tested:
 
 - Channel list, playback, the guide grid, and both `Start In` values.
-- The Tuner setting and the in-module picker listing all three tuners by UDP
-  discovery. Video Quality appearing only for the EXTENDs as the Tuner changes.
+- The Tuner setting and the in-module picker listing both EXTENDs by UDP
+  discovery, with the legacy DUAL left out. Video Quality appearing for the
+  EXTENDs as the Tuner changes.
 - The guide reading its cache with no `QML_XHR_ALLOW_FILE_READ` in the
   environment.
 - Starting a scan from Settings and from R; a second request while one runs is
   refused; the scan survives the app quitting; the guide shows progress and
   reloads when done.
 - Returning to the guide on the channel just watched.
-- TODO verify, then delete this marker: tuning with every tuner on the chosen
-  EXTEND busy plays from the other EXTEND; Backup Tuner changes which one is
-  tried next; the DUAL is used only when both EXTENDs are full; with everything
-  busy the guide shows TUNERS BUSY.
+- Tuner fallback: with both tuners on the chosen EXTEND in use (another client
+  and a guide scan), channels played from the other EXTEND. Hopping channels
+  fast enough that the tuners hadn't been released yet showed TUNERS BUSY in
+  the guide.
 - Crop memory: crop a channel, retune it, and an uncropped channel is left alone.
 - Guide scanning against a full market: 2696 events across 48 channels,
   cross-checked event by event against an independent TSDuck capture. There were
