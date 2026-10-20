@@ -224,6 +224,23 @@ QtObject {
         guideLoaded(hdhomerunBackend.read_guide())
     }
 
+    // Why the last channel didn't play, for the guide to show. mpv only reports
+    // "failed"; the usual cause is HTTP 503 because every tuner is in use (by
+    // other clients or a guide scan), which status.json shows as a TargetIP on
+    // each tuner.
+    property string playFailure: ""
+
+    function reportPlayFailure() {
+        playFailure = ""
+        _getJson("http://" + deviceIp() + "/status.json",
+                 function(tuners) {
+                     var busy = tuners.length > 0
+                             && tuners.every(function(t) { return t.TargetIP !== undefined })
+                     playFailure = busy ? "TUNERS BUSY" : "PLAY FAILED"
+                 },
+                 function() { playFailure = "NO TUNER" })
+    }
+
     // "started" | "running" | "failed"; see HDHomeRunBackend::start_guide_scan.
     function startGuideScan() { return hdhomerunBackend.start_guide_scan() }
     function scanStatus()     { return hdhomerunBackend.scan_status() }
