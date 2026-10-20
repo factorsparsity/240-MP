@@ -34,6 +34,10 @@ YouTube playlists.
   A channel ident is somebody's trademark, so the user drops their own
   transparent PNGs into a directory.
 - Bumpers deliberately get neither card nor bug.
+- Card and bug sit inside the broadcast title-safe area, 10% in from the edges,
+  sized and placed as fractions of the screen. On a CRT over composite the
+  picture fills the whole raster and the set overscans, and tighter margins put
+  both partly off screen.
 - Settings: playback resolution, title cards on/off, bug on/off, videos between
   bumpers, and a **Title Font** choice.
 

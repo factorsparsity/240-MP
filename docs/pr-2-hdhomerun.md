@@ -33,6 +33,19 @@ programme guide built from the broadcast's own PSIP data.
 - **Tuner** setting, filled by UDP broadcast discovery on the LAN (no internet
   needed). The same list is in an in-module picker (**D** from the channel list),
   which also opens on its own when no tuner is set.
+- **Tuner fallback.** An HDHomeRun refuses a stream (HTTP 503) when all its
+  tuners are in use, by other clients on the LAN or by a guide scan. Before
+  tuning, the module checks each device's `status.json` for a free tuner, in
+  this order:
+  1. **Tuner**
+  2. **Backup Tuner** (default Automatic)
+  3. every other discovered tuner that carries the channel
+
+  Tuners without a hardware encoder always come last, whatever the settings say:
+  they send full-rate MPEG-2, which a Pi decodes in software. If no tuner is
+  free, the guide says **TUNERS BUSY** (or **NO TUNER** when none answers)
+  instead of the player silently dropping back. A stream that still fails gets
+  the same explanation.
 - Optional hardware transcoding on EXTEND models. The **Video Quality** setting
   only appears when the selected tuner has the encoder. The default is
   `internet480` (704x480): what a 480i CRT wants, at about a ninth of the 1080p
@@ -59,8 +72,12 @@ programme guide built from the broadcast's own PSIP data.
     `QML_XHR_ALLOW_FILE_READ`.
   - Start a scan (`QProcess::startDetached`, so a long scan outlives the app) and
     report its status.
-  - UDP discovery for the Tuner setting's `options_slot`, plus a `transcode`
-    capability (via `apply_slot`) that gates Video Quality.
+  - UDP discovery for the Tuner and Backup Tuner `options_slot`, plus a
+    `transcode` capability (via `apply_slot`) that gates Video Quality.
+- **Priority as two settings.** There's no ordered-list setting type, so the
+  tuner order is Tuner plus Backup Tuner, with the rest in discovery order. That
+  covers a full order for up to three tuners. Older firmware (the DUAL here) has
+  no `status.json`; a 404 is taken as "up, can't say", and that tuner is tried.
 - **The guide scanner stays in Python**, standard library only (no pip install),
   run as a child process the way yt-dlp is. Every scan goes through one entry
   point, `epg-rescan-trigger.py`, which scans the configured tuner and holds a
@@ -113,6 +130,8 @@ The data directory is `~/.local/share/240-MP` on Linux and
    appears by itself the first time, and **D** in the channel list reopens it.
    - A tuner discovery can't reach (another subnet, say) can be set by IP: put it
      in `device_id` under `modules → com.240mp.hdhomerun` in `config.json`.
+   - **With more than one tuner**, set **Backup Tuner** to the next choice, or
+     leave it on Automatic. Fallback needs no other setup.
 3. **Build the guide.** Press **R** in the guide, or use **Settings → HDHomeRun →
    Rescan Guide Data**. Progress shows in the guide's top-left cell. The first
    scan takes about 90 minutes. Requires `python3`, standard library only.
@@ -129,6 +148,7 @@ The data directory is `~/.local/share/240-MP` on Linux and
    ```
 5. **Optional settings:**
    - **Video Quality** (EXTEND tuners only) sets the transcode profile.
+   - **Backup Tuner** picks which tuner to try next when Tuner is busy.
    - **Start In** chooses whether the guide or the channel list opens first.
 6. **Crop memory needs no setup.** Toggle CROP in the on-screen controls and the
    channel remembers it.
@@ -159,6 +179,10 @@ What I tested:
   refused; the scan survives the app quitting; the guide shows progress and
   reloads when done.
 - Returning to the guide on the channel just watched.
+- TODO verify, then delete this marker: tuning with every tuner on the chosen
+  EXTEND busy plays from the other EXTEND; Backup Tuner changes which one is
+  tried next; the DUAL is used only when both EXTENDs are full; with everything
+  busy the guide shows TUNERS BUSY.
 - Crop memory: crop a channel, retune it, and an uncropped channel is left alone.
 - Guide scanning against a full market: 2696 events across 48 channels,
   cross-checked event by event against an independent TSDuck capture. There were
