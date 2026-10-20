@@ -272,6 +272,8 @@ void HDHomeRunBackend::get_devices() {
             options.append(QVariantMap{{"id", d.value("ip")}, {"label", d.value("label")}});
         }
         emit dynamicOptionsReady("device_id", options);
+        options.prepend(QVariantMap{{"id", "auto"}, {"label", "AUTOMATIC"}});
+        emit dynamicOptionsReady("backup_device_id", options);
         emitTranscodeCapability();
     });
 }

@@ -14,6 +14,8 @@ network tuner.
   across the top, programme blocks sized by duration, and a detail pane.
   Guide data is parsed from the broadcast itself (ATSC PSIP), not fetched
   from a paid listings service.
+- **Tuner fallback.** When the chosen tuner is busy, the next HDHomeRun with a
+  free tuner and the same channel plays it instead.
 - **Automatic tuner discovery** by UDP broadcast on the LAN (no internet
   needed), in Settings and in the module's own picker.
 - **Optional hardware transcoding** on HDHomeRun EXTEND models, defaulting
@@ -62,6 +64,7 @@ framebuffer and cannot take the screen over SSH.
 | Enabled | Show the module |
 | Start In | Which view opens first: **Guide** (default) or Channels. `>` opens the guide from the channel list, `C` opens the channel list from the guide, `R` in the guide starts a rescan |
 | Tuner | HDHomeRun tuners found on the LAN by UDP broadcast |
+| Backup Tuner | Tried when every tuner on Tuner is in use; then any other tuner on the LAN. Tuners without an encoder always come last. If none is free, the guide shows TUNERS BUSY |
 | Video Quality | Transcode profile. Shown only when the selected tuner has an encoder (EXTEND) |
 | Rescan Guide Data | Starts a guide scan in the background (~90 min the first time) |
 

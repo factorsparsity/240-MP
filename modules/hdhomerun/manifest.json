@@ -20,6 +20,15 @@
       "description": "HDHomeRun tuners found on your network. D in the channel list opens the same picker."
     },
     {
+      "key": "backup_device_id",
+      "label": "Backup Tuner",
+      "type": "list_single",
+      "options_source": "dynamic",
+      "options_slot": "get_devices",
+      "default": "auto",
+      "description": "Used when every tuner on Tuner is busy. Any other tuners follow; tuners that can't transcode always come last."
+    },
+    {
       "key": "start_view",
       "label": "Start In",
       "type": "list_single",

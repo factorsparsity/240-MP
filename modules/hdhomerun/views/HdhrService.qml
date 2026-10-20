@@ -36,6 +36,16 @@ QtObject {
     // on this LAN and would be handed a parameter it never advertised.
     property bool _canTranscode: false
 
+    // Every HDHomeRun on the LAN, for falling back when the preferred one has no
+    // free tuner. _devices is the last discovery ([{ip, canTranscode}]),
+    // _lineups maps ip -> {guideNumber: true}, so a device is only tried for
+    // channels it carries. Both fill in the background after load_channels();
+    // until then the configured device is the only candidate.
+    property var _devices: []
+    property var _lineups: ({})
+    // The device the last stream came from, for reportPlayFailure().
+    property string _tunedIp: ""
+
     // Discovery gets a deadline of its own, so the picker can never be left on
     // "SEARCHING..." if the backend's reply is somehow lost.
     property bool _discovering: false
@@ -78,6 +88,7 @@ QtObject {
     // Default duplicated in manifest.json by necessity: the key is absent from
     // config.json until the user changes it, so there must be a fallback here too.
     function transcodeProfile() { return _setting("transcode_profile", "internet480") }
+    function backupIp() { return _setting("backup_device_id", "auto") }
 
     // Persist a chosen tuner and immediately reload against it.
     function selectDevice(ip) {
@@ -127,6 +138,9 @@ QtObject {
         _getJson("http://" + ip + "/discover.json",
                  function(d) { _canTranscode = _supportsTranscode(d); _fetchLineup(ip) },
                  function()  { _canTranscode = false;                 _fetchLineup(ip) })
+        // Straight to the backend, not discoverDevices(): that one drives the
+        // picker and its timeout raises errorOccurred, which would end playback.
+        hdhomerunBackend.discover_devices()
     }
 
     // discover.json exposes no capability field, so the model/firmware string is
@@ -163,22 +177,82 @@ QtObject {
         for (var i = 0; i < _channels.length; i++) {
             if (_channels[i].guideNumber !== guideNumber)
                 continue
-
-            // Omitting ?transcode= does NOT give the raw broadcast — the device
-            // applies its own configured default (measured: this EXTEND returns
-            // 1080p H.264 for a bare lineup URL). So "none" is a real choice
-            // meaning MPEG-2, not "no preference", and leaving it off is not neutral.
-            var url = String(_channels[i].streamUrl).split("?")[0]
-            if (_canTranscode)
-                url += "?transcode=" + transcodeProfile()
-
-            // One argument, not Plex's (url, token): AppCore never wires this
-            // signal, so its shape is this module's own choice, and HDHomeRun LAN
-            // streams are unauthenticated.
-            streamUrlReady(url)
+            var lineupUrl = String(_channels[i].streamUrl).split("?")[0]
+            _tuneFirstFree(_candidates(guideNumber, lineupUrl), 0, false)
             return
         }
         errorOccurred("CHANNEL NOT FOUND: " + guideNumber)
+    }
+
+    // Tuner, then Backup Tuner, then every other device in discovery order;
+    // devices that can't transcode always come after those that can, whatever
+    // the settings say, because they send full-rate MPEG-2 that the Pi
+    // decodes in software.
+    function _candidates(guideNumber, lineupUrl) {
+        var primary = deviceIp()
+        var backup = backupIp()
+        var list = [{ ip: primary, canTranscode: _canTranscode, url: lineupUrl }]
+        var others = _devices.filter(function(d) {
+            return d.ip !== primary && _lineups[d.ip] && _lineups[d.ip][guideNumber]
+        })
+        others.sort(function(a, b) { return (b.ip === backup ? 1 : 0) - (a.ip === backup ? 1 : 0) })
+        others.forEach(function(d) {
+            list.push({ ip: d.ip, canTranscode: d.canTranscode,
+                        url: "http://" + d.ip + ":5004/auto/v" + guideNumber })
+        })
+        return list.filter(function(c) { return c.canTranscode })
+                   .concat(list.filter(function(c) { return !c.canTranscode }))
+    }
+
+    // A device answers 503 when all its tuners are taken; status.json shows a
+    // taken tuner as one with a TargetIP. When no device has one free, the
+    // guide says so instead of trying a stream that would be refused.
+    function _tuneFirstFree(candidates, n, anyReachable) {
+        if (n >= candidates.length) {
+            playFailure = ""
+            playFailure = anyReachable ? "TUNERS BUSY" : "NO TUNER"
+            errorOccurred(anyReachable ? "ALL TUNERS BUSY" : "NO TUNER REACHABLE")
+            return
+        }
+        var c = candidates[n]
+        _getJson("http://" + c.ip + "/status.json", function(tuners) {
+            if (!tuners.some(function(t) { return t.TargetIP === undefined })) {
+                _tuneFirstFree(candidates, n + 1, true)
+                return
+            }
+            if (n > 0)
+                console.log("[HDHomeRun] using " + c.ip + "; earlier choices have no free tuner")
+            _streamFrom(c)
+        }, function() { _tuneFirstFree(candidates, n + 1, anyReachable) })
+    }
+
+    function _streamFrom(c) {
+        // Omitting ?transcode= does NOT give the raw broadcast — the device
+        // applies its own configured default (measured: this EXTEND returns
+        // 1080p H.264 for a bare lineup URL). So "none" is a real choice
+        // meaning MPEG-2, not "no preference", and leaving it off is not neutral.
+        var url = c.url
+        if (c.canTranscode)
+            url += "?transcode=" + transcodeProfile()
+        _tunedIp = c.ip
+
+        // One argument, not Plex's (url, token): AppCore never wires this
+        // signal, so its shape is this module's own choice, and HDHomeRun LAN
+        // streams are unauthenticated.
+        streamUrlReady(url)
+    }
+
+    function _loadLineups(devices) {
+        _devices = devices
+        devices.forEach(function(d) {
+            _getJson("http://" + d.ip + "/lineup.json", function(arr) {
+                var numbers = {}
+                arr.forEach(function(ch) { if (ch.GuideNumber) numbers[ch.GuideNumber] = true })
+                var all = _lineups
+                all[d.ip] = numbers
+                _lineups = all
+            }, function() {})
+        })
     }
 
     // ---------------------------------------------------------------------
@@ -232,7 +306,7 @@ QtObject {
 
     function reportPlayFailure() {
         playFailure = ""
-        _getJson("http://" + deviceIp() + "/status.json",
+        _getJson("http://" + (_tunedIp || deviceIp()) + "/status.json",
                  function(tuners) {
                      var busy = tuners.length > 0
                              && tuners.every(function(t) { return t.TargetIP !== undefined })
@@ -258,6 +332,9 @@ QtObject {
 
     property Connections _backend: Connections {
         target: hdhomerunBackend
-        function onDevicesDiscovered(devices) { svc._finishDiscovery(devices) }
+        function onDevicesDiscovered(devices) {
+            svc._loadLineups(devices)
+            svc._finishDiscovery(devices)
+        }
     }
 }
