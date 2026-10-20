@@ -30,10 +30,7 @@ FocusScope {
     focus: true
 
     function _dataRoot() {
-        var home = appCore.homePath()
-        return Qt.platform.os === "osx"
-            ? home + "/Library/Application Support/240-MP"
-            : home + "/.local/share/240-MP"
+        return hdhomerunBackend.data_root()
     }
 
     // Filesystem path of this module's directory, derived from this QML file's

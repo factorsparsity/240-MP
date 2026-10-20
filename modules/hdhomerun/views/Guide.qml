@@ -56,6 +56,45 @@ FocusScope {
         }
     }
 
+    // Guide-scan feedback. A scan runs for up to 90 minutes in the background
+    // and Settings action rows show nothing, so the guide is where its state is
+    // shown: polled while open, with a reload once it finishes.
+    property var scanStatus: ({ running: false, detail: "", updatedMs: 0 })
+    property string scanNotice: ""      // transient, after R or a finished scan
+
+    function refreshScanStatus() {
+        var st = hdhr.scanStatus()
+        if (scanStatus.running && !st.running) {
+            scanNotice = "GUIDE UPDATED"
+            noticeTimer.restart()
+            hdhr.load_guide()
+        }
+        scanStatus = st
+    }
+
+    function startScan() {
+        var result = hdhr.startGuideScan()
+        scanNotice = result === "started" ? "SCAN STARTED"
+                   : result === "running" ? "ALREADY SCANNING"
+                   : "SCAN FAILED"
+        noticeTimer.restart()
+        refreshScanStatus()
+    }
+
+    Timer {
+        interval: 3000
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: guideRoot.refreshScanStatus()
+    }
+
+    Timer {
+        id: noticeTimer
+        interval: 6000
+        onTriggered: guideRoot.scanNotice = ""
+    }
+
     focus: true
 
     // ---
@@ -224,6 +263,10 @@ FocusScope {
                 currentEvent++; scrollToSelection()
             }
             event.accepted = true
+        } else if (event.key === Qt.Key_R) {
+            // Shortcut for Settings → Rescan Guide Data, here where its result shows.
+            guideRoot.startScan()
+            event.accepted = true
         } else if (event.key === Qt.Key_C) {
             // Left/Right are the time axis here, so the channel list needs a key
             // of its own — without one it is unreachable when start_view is
@@ -272,7 +315,9 @@ FocusScope {
     Text {
         visible: channels.length === 0 || Object.keys(guide).length === 0
         text: !guideRoot.channelsReady ? "LOADING..."
-              : (Object.keys(guide).length === 0 ? "NO GUIDE DATA - RUN RESCAN GUIDE DATA IN SETTINGS"
+              : (Object.keys(guide).length === 0
+                 ? (guideRoot.scanStatus.running ? "NO GUIDE DATA YET - SCAN IN PROGRESS"
+                                                 : "NO GUIDE DATA - PRESS R OR USE RESCAN GUIDE DATA IN SETTINGS")
                                                  : "NO CHANNELS")
         color: root.tertiaryColor
         font.family: root.globalFont
@@ -301,6 +346,24 @@ FocusScope {
         property real laneWidth: width - labelWidth
         property real pxPerMinute: laneWidth / guideRoot.windowMinutes
         property real rowHeight: root.sh * 0.0666667
+
+        // Scan status, in the otherwise empty cell above the channel names. Short
+        // messages only: the cell is the label column's width, and it elides.
+        Text {
+            id: scanLine
+            x: 0
+            width: grid.labelWidth - root.sw * 0.01
+            height: grid.rowHeight
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+            text: guideRoot.scanNotice !== "" ? guideRoot.scanNotice
+                  : !guideRoot.scanStatus.running ? ""
+                  : guideRoot.scanStatus.detail === "FINDING CHANNELS" ? "FINDING CHANNELS"
+                  : "SCANNING" + (guideRoot.scanStatus.detail ? " " + guideRoot.scanStatus.detail : "...")
+            color: root.accentColor
+            font.family: root.globalFont
+            font.pixelSize: root.sh * 0.0333333
+        }
 
         // Time header
         Row {
@@ -498,7 +561,7 @@ FocusScope {
     Text {
         id: footer
         text: root.hints.back + ":BACK " + root.hints.navigate + ":NAVIGATE " +
-              root.hints.select + ":WATCH  C:CHANNELS"
+              root.hints.select + ":WATCH  C:CHANNELS  R:RESCAN"
         color: root.tertiaryColor
         font.family: root.globalFont
         anchors.bottom: parent.bottom
