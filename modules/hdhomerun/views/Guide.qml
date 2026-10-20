@@ -89,6 +89,20 @@ FocusScope {
         onTriggered: guideRoot.refreshScanStatus()
     }
 
+    // Set by the service after a channel fails to play; usually arrives just
+    // after the guide reloads, hence both the handler and onCompleted.
+    function showPlayFailure() {
+        if (hdhr.playFailure === "") return
+        scanNotice = hdhr.playFailure
+        hdhr.playFailure = ""
+        noticeTimer.restart()
+    }
+
+    Connections {
+        target: hdhr
+        function onPlayFailureChanged() { guideRoot.showPlayFailure() }
+    }
+
     Timer {
         id: noticeTimer
         interval: 6000
@@ -235,6 +249,7 @@ FocusScope {
     Component.onCompleted: {
         hdhr.load_channels()
         hdhr.load_guide()
+        showPlayFailure()
     }
 
     // Front panel follows the highlighted row, same as the channel list.
