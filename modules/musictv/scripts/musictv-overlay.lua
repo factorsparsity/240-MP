@@ -43,8 +43,11 @@ local MIN_DUR_FOR_END = 25.0
 
 local BUG_ID     = 63     -- overlay id, high enough to stay clear of other scripts
 
--- Layout, as fractions of the OSD height/width
-local L_MARGIN   = 0.075
+-- Layout, as fractions of the OSD height/width. Card and bug stay inside the
+-- broadcast title-safe area (10% in from each edge), because a CRT overscans
+-- and composite video fills the whole raster: at the old 5-7.5% margins both
+-- were partly cut off on a real set.
+local L_MARGIN   = 0.10
 local BLOCK_BOT  = 0.90   -- bottom of the text block in normal playback
 local BLOCK_BOT_OSC = 0.60 -- ... and when the OSC menu is up (its bar sits at 0.74)
 -- Josefin Sans has a notably small x-height, so the same nominal size reads
@@ -52,8 +55,8 @@ local BLOCK_BOT_OSC = 0.60 -- ... and when the OSC menu is up (its bar sits at 0
 -- this is where lowercase stops being marginal.
 local FONT_SIZE  = 0.056
 local BUG_HEIGHT = 0.10
-local BUG_MARGIN_X = 0.05
-local BUG_MARGIN_Y = 0.08
+local BUG_MARGIN_X = 0.10
+local BUG_MARGIN_Y = 0.10
 
 math.randomseed(os.time())
 
