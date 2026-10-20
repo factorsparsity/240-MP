@@ -237,8 +237,12 @@ void HDHomeRunBackend::discover(std::function<void(const QVariantList &)> done) 
                 // selectable by IP.
                 QString label = ip;
                 bool canTranscode = false;
+                bool legacy = false;
                 if (reply->error() == QNetworkReply::NoError) {
                     const QJsonObject d = QJsonDocument::fromJson(reply->readAll()).object();
+                    // Legacy models (e.g. the DUAL, HDHR-US) have no HTTP
+                    // streaming and no local lineup.json, so they can't play here.
+                    legacy = d.value("Legacy").toInt() == 1;
                     // "EXTEND 10.0.1.62": short enough that the IP, the only
                     // thing telling two of the same model apart, survives the
                     // Settings row's truncation.
@@ -248,8 +252,9 @@ void HDHomeRunBackend::discover(std::function<void(const QVariantList &)> done) 
                         label = name + " " + ip;
                     canTranscode = supportsTranscode(d);
                 }
-                devices->append(QVariantMap{{"ip", ip}, {"label", label.toUpper()},
-                                            {"canTranscode", canTranscode}});
+                if (!legacy)
+                    devices->append(QVariantMap{{"ip", ip}, {"label", label.toUpper()},
+                                                {"canTranscode", canTranscode}});
                 if (--(*remaining) == 0) {
                     std::sort(devices->begin(), devices->end(), [](const QVariant &a, const QVariant &b) {
                         return a.toMap().value("ip").toString() < b.toMap().value("ip").toString();

@@ -32,8 +32,8 @@ QtObject {
     property var _channels: []
 
     // True when the configured device has the hardware H.264 encoder. Never send
-    // ?transcode= to a device that lacks it: a non-transcoding DUAL (HDHR-US) sits
-    // on this LAN and would be handed a parameter it never advertised.
+    // ?transcode= to a device that lacks it (CONNECT, FLEX): it would be handed a
+    // parameter it never advertised.
     property bool _canTranscode: false
 
     // Every HDHomeRun on the LAN, for falling back when the preferred one has no
@@ -223,12 +223,7 @@ QtObject {
             if (n > 0)
                 console.log("[HDHomeRun] using " + c.ip + "; earlier choices have no free tuner")
             _streamFrom(c)
-        }, function(msg) {
-            // Older firmware (the DUAL here) has no status.json: the device is
-            // up but can't say whether a tuner is free, so try it.
-            if (msg === "HTTP 404") _streamFrom(c)
-            else _tuneFirstFree(candidates, n + 1, anyReachable)
-        })
+        }, function() { _tuneFirstFree(candidates, n + 1, anyReachable) })
     }
 
     function _streamFrom(c) {
@@ -284,7 +279,7 @@ QtObject {
                              && tuners.every(function(t) { return t.TargetIP !== undefined })
                      playFailure = busy ? "TUNERS BUSY" : "PLAY FAILED"
                  },
-                 function(msg) { playFailure = msg === "HTTP 404" ? "PLAY FAILED" : "NO TUNER" })
+                 function() { playFailure = "NO TUNER" })
     }
 
     // "started" | "running" | "failed"; see HDHomeRunBackend::start_guide_scan.
