@@ -61,11 +61,13 @@ BUILDING.md, and it cost a physical power cycle. Safe pattern: drop-in
 remove the drop-in and `daemon-reload` (use a shell `trap` so it always comes off).
 `segdisplay.service` can be restarted normally.
 
-**Open: OLED not detected since that power cycle.** `segdisplay` reports
+**Resolved: OLED not detected after that power cycle — a plain reboot fixed it.** `segdisplay` reports
 `/dev/i2c-1: Input/output error — running dry` from boot (before the deploy, with
 the old build too); every earlier boot said `display connected at 0x3C`. Looks
 like wiring/hardware. After reseating: `sudo i2cdetect -y 1` should show `3c`,
-then `sudo systemctl restart segdisplay`.
+then `sudo systemctl restart segdisplay`. In practice the panel came back after
+another reboot: a hard power cut can leave the SSD1306/I2C bus wedged, and a
+clean boot clears it. Try that before touching wiring.
 
 ## 2026-10-20 (later) — third repo found: Aug 16 work, front panel
 
