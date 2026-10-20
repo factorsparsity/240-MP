@@ -1,17 +1,14 @@
 import QtQuick
 
-// HdhrService — the whole HDHomeRun backend, in QML/JS.
+// HdhrService — the module's service layer for the views.
 //
-// This replaces src/HDHomeRunBackend.{h,cpp}. The point is that 240-MP discovers
-// modules purely from the filesystem (AppCore.cpp:15-32 scans appRoot/modules for
-// any dir with a manifest.json) and registerModule explicitly tolerates a null
-// backend, so a module that needs no C++ can be dropped into ANY stock 240-MP
-// install — including upstream's prebuilt release tarball — with no recompile.
-// A compiled backend would pin us to a self-built binary forever.
+// The tuner is a plain HTTP server, so lineup, tuning and stream URLs are done
+// here in QML. What QML cannot do (read the guide cache from disk, find tuners
+// by UDP broadcast) is delegated to hdhomerunBackend
+// (src/modules/hdhomerun/HDHomeRunBackend).
 //
-// It keeps the old backend's signal/method names so the views changed as little
-// as possible: load_channels/tune_channel/load_guide in, channelsLoaded/
-// guideLoaded/streamUrlReady/errorOccurred out.
+// load_channels/tune_channel/load_guide in, channelsLoaded/guideLoaded/
+// streamUrlReady/errorOccurred out.
 //
 // Reached by views as an injected property, not a singleton — Root.qml owns the
 // single instance and passes it through the Loader. Upstream declares no QML
@@ -26,9 +23,8 @@ QtObject {
     signal guideLoaded(var guide)
     signal streamUrlReady(string url)
     signal errorOccurred(string message)
-    // No C++ equivalent: device discovery used to populate a settings dropdown via
-    // dynamicOptionsReady. That path needs a backend, so discovery moved into the
-    // module's own UI and reports here instead.
+    // For the in-module tuner picker; the Settings row gets the same list from
+    // the backend's get_devices options_slot.
     signal devicesDiscovered(var devices)
 
     // Cached from the last load_channels(), exactly as the C++ m_channels was —
@@ -40,10 +36,8 @@ QtObject {
     // on this LAN and would be handed a parameter it never advertised.
     property bool _canTranscode: false
 
-    // Discovery needs a deadline of its own. QML's XMLHttpRequest has no working
-    // timeout, so a hung request leaves the picker on "SEARCHING..." forever —
-    // and the case most likely to hang is a box with no internet, which is
-    // precisely when the user needs to be told rather than left waiting.
+    // Discovery gets a deadline of its own, so the picker can never be left on
+    // "SEARCHING..." if the backend's reply is somehow lost.
     property bool _discovering: false
     property Timer _discoveryDeadline: Timer {
         interval: 12000
@@ -95,14 +89,12 @@ QtObject {
     // HTTP
     // ---------------------------------------------------------------------
 
-    // status 0 with a body is a successful file:// read — Qt reports no HTTP
-    // status for local files, and load_guide() depends on that case.
     function _getJson(url, onOk, onErr) {
         var xhr = new XMLHttpRequest()
         xhr.onreadystatechange = function() {
             if (xhr.readyState !== XMLHttpRequest.DONE)
                 return
-            var ok = (xhr.status === 200) || (xhr.status === 0 && xhr.responseText !== "")
+            var ok = (xhr.status === 200)
             if (!ok) {
                 onErr("HTTP " + xhr.status)
                 return
@@ -138,8 +130,7 @@ QtObject {
     }
 
     // discover.json exposes no capability field, so the model/firmware string is
-    // the only local signal. (The cloud discovery API does better — see
-    // discoverDevices(), which carries an explicit Transcode flag.)
+    // the only local signal. Same rule as the backend's supportsTranscode().
     function _supportsTranscode(d) {
         var model = String(d.ModelNumber || "").toUpperCase()
         var fw    = String(d.FirmwareName || "").toLowerCase()
@@ -227,94 +218,29 @@ QtObject {
     // EPG
     // ---------------------------------------------------------------------
 
-    // Mirrors main.cpp's resolveDataRoot(): QStandardPaths::AppDataLocation with
-    // applicationName "240-MP" and no organization. Known gap vs. the C++ version,
-    // which was handed dataRoot directly: a DATA_ROOT env override is invisible
-    // from QML, so a non-default data dir needs epg_cache.json in the standard spot.
-    function _dataRoot() {
-        var home = appCore.homePath()
-        return Qt.platform.os === "osx"
-            ? home + "/Library/Application Support/240-MP"
-            : home + "/.local/share/240-MP"
+    // The cache is { "_multiplexes": {...}, "channels": { "2.1": [events] } };
+    // the backend returns just "channels" ({} before the first scan).
+    function load_guide() {
+        guideLoaded(hdhomerunBackend.read_guide())
     }
 
-    // The cache is { "_multiplexes": {...}, "channels": { "2.1": [events] } }.
-    // Only "channels" is guide data; "_multiplexes" is the scanner's cached RF map,
-    // which exists because lineup.json exposes no RF number.
-    function load_guide() {
-        var url = "file://" + _dataRoot() + "/epg_cache.json"
-        _getJson(url,
-                 function(d) {
-                     var ch = d.channels || ({})
-                     console.log("[HDHomeRun] guide loaded: " + Object.keys(ch).length + " channels from " + url)
-                     guideLoaded(ch)
-                 },
-                 function(msg) {
-                     // Silent failure here reads as "no guide data" in the UI,
-                     // which is indistinguishable from "never scanned" — so say
-                     // which file we tried and why it failed.
-                     console.log("[HDHomeRun] guide read FAILED (" + msg + ") for " + url)
-                     guideLoaded({})
-                 })
-    }
+    // "started" | "running" | "failed"; see HDHomeRunBackend::start_guide_scan.
+    function startGuideScan() { return hdhomerunBackend.start_guide_scan() }
+    function scanStatus()     { return hdhomerunBackend.scan_status() }
 
     // ---------------------------------------------------------------------
     // Device discovery
     // ---------------------------------------------------------------------
 
-    // The C++ version broadcast a CRC-32'd UDP packet on port 65001. QML has no
-    // UDP, so this uses HDHomeRun's HTTP discovery service, which returns every
-    // device sharing the caller's public IP. Verified to return the same three
-    // devices the UDP sweep found on this LAN — and it is strictly better in one
-    // way: each entry carries an explicit "Transcode" flag, where the local
-    // discover.json forces us to string-match the model number.
-    //
-    // Tradeoff, and it is a real one: this needs working internet, where UDP
-    // broadcast was LAN-only. selectDevice() accepts a hand-typed IP for that case.
+    // UDP broadcast on the LAN, done by the backend: works without internet.
     function discoverDevices() {
         _discovering = true
         _discoveryDeadline.restart()
-
-        _getJson("https://ipv4-api.hdhomerun.com/discover", function(list) {
-            if (!list || list.length === 0) {
-                _finishDiscovery([])
-                return
-            }
-            var devices = []
-            var remaining = list.length
-
-            for (var i = 0; i < list.length; i++)
-                _describe(list[i], devices, function() {
-                    if (--remaining === 0) {
-                        devices.sort(function(a, b) { return a.ip < b.ip ? -1 : 1 })
-                        _finishDiscovery(devices)
-                    }
-                })
-        }, function(msg) {
-            if (!_discovering)
-                return
-            errorOccurred("DISCOVERY FAILED: " + msg)
-            _finishDiscovery([])
-        })
+        hdhomerunBackend.discover_devices()
     }
 
-    // Resolve one device's friendly name and tuner count. Failure is not fatal —
-    // a device that answered discovery but not HTTP is still selectable by IP.
-    function _describe(entry, out, done) {
-        var ip = entry.LocalIP || ""
-        var canTranscode = (entry.Transcode === 1)
-        if (ip === "") { done(); return }
-
-        _getJson("http://" + ip + "/discover.json", function(d) {
-            var label = (d.FriendlyName || "HDHOMERUN") + " " + ip
-            if (d.TunerCount > 0)
-                label += " (" + d.TunerCount + " TUNERS)"
-            out.push({ ip: ip, label: label.toUpperCase(),
-                       canTranscode: canTranscode || _supportsTranscode(d) })
-            done()
-        }, function() {
-            out.push({ ip: ip, label: ip, canTranscode: canTranscode })
-            done()
-        })
+    property Connections _backend: Connections {
+        target: hdhomerunBackend
+        function onDevicesDiscovered(devices) { svc._finishDiscovery(devices) }
     }
 }

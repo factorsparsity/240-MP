@@ -106,7 +106,9 @@ def discover_multiplexes():
     retry, and the warning at the end.
     """
     found, failed = {}, []
-    for rf in RF_CHANNELS:
+    for i, rf in enumerate(RF_CHANNELS, 1):
+        # Progress for the guide's status cell, like "Scanning RF ... [i/n]" below.
+        print(f"Probing RF {rf} [{i}/{len(RF_CHANNELS)}]", flush=True)
         for attempt in (1, 2):
             try:
                 chans = psip.scan_channels(stream_url(rf), PROBE_SECONDS)
@@ -159,8 +161,11 @@ def main():
 
     guide = cache.get("channels", {})
     scanned = 0
-    for rf in sorted(rf_map, key=int):
-        print(f"Scanning RF {rf} ({', '.join(rf_map[rf])})...", flush=True)
+    order = sorted(rf_map, key=int)
+    for i, rf in enumerate(order, 1):
+        # "[i/n]" is read back by HDHomeRunBackend::scan_status() for the guide's
+        # progress line.
+        print(f"Scanning RF {rf} [{i}/{len(order)}] ({', '.join(rf_map[rf])})...", flush=True)
         try:
             guide.update(psip.scan_multiplex(stream_url(rf), CAPTURE_SECONDS))
             scanned += 1
