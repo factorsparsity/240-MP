@@ -16,6 +16,7 @@ PR. Newest entry first.
 | `hdhomerun-module` | New module: HDHomeRun live TV + ATSC PSIP guide. Pure QML (`HdhrService.qml`), Python EPG scanner + systemd units. | Tested on Mac (guide, tune) before the Aug 16 port; re-test crop memory and guide return. |
 | `musictv-module` | New module: 80s music-video channel from YouTube playlists. `MusicTvBackend` (C++) + QML + mpv Lua overlay. | Tested on Mac. **Not yet on Pi** since the backend was added. |
 | `youtube-playlist-shuffle` | Adds Play in order / Shuffle to the existing YouTube Playlists view + `shuffle_playlists` setting. Playlists themselves are upstream, not ours. | Builds; shuffle not yet exercised. |
+| `frontpanel-module` | New module: Front Panel (SSD1306 OLED as 7-segment), `modules/segdisplay/`, plus HDHomeRun's `announceChannel` panel call. Based on `hdhomerun-module`. Needs the `Main.qml` hook (`scripts/patch_main_qml.py` at deploy). **Not a PR yet** — aux-display hook to be proposed upstream first. | Not tested since the port (Pi + OLED hardware only). |
 | `test-integration` | Local test only: main + all three merged. Never PR this. Rebuild it after changing any feature branch. | |
 
 Make changes on the feature branch, then `git checkout test-integration && git merge <branch>` to test together.
@@ -26,9 +27,9 @@ Make changes on the feature branch, then `git checkout test-integration && git m
 2. Run Music TV on the Pi (backend, font in `~/.local/share/fonts`, bugs units).
 3. Optionally squash `musictv-module`'s two commits into one before the PR.
 4. Open three PRs: `factorsparsity:<branch>` → `anthonycaccese:main`.
-5. Front panel: create `frontpanel-module` from the source repo's `segdisplay/`
-   (plus the HDHomeRun `announceChannel` lines), merge into `test-integration`,
-   and draft the aux-display `Main.qml` hook proposal as a separate PR.
+5. Front panel: test on the Pi, then draft the aux-display hook proposal
+   (generic "current screen / label / playback" from `Main.qml` or AppCore)
+   as its own PR; rework `segdisplay` and `announceChannel` onto it.
 
 ## 2026-10-20 (later) — third repo found: Aug 16 work, front panel
 
@@ -49,7 +50,7 @@ contained front-panel `announceChannel` lines, which this branch does not carry.
 Commit messages are the source repo's plain style, not `feat(hdhomerun):` —
 squash before the PR if upstream wants one commit.
 
-**Not yet in the fork: the Front Panel module** (`segdisplay/`, 6 commits in the
+**Front Panel module, now on `frontpanel-module`** (`segdisplay/`, 6 commits in the
 source repo). SSD1306 128x32 I2C OLED drawn as 7-segment digits: menu label >
 setup > HDHomeRun channel > weather > elapsed > clock. Python daemon
 (`segdisplay.py`, HTTP on 127.0.0.1:8377) + `SegHook.qml` + systemd unit. It
@@ -63,6 +64,15 @@ front panel**, not in the HDHomeRun PR. It is harmless when no panel exists
 (fails silently, independent of Main.qml), but a hardcoded port for a module
 upstream doesn't have would draw review pushback. `test-integration` merges
 both, so a box with a panel loses nothing.
+
+**Porting `frontpanel-module`.** Built on `hdhomerun-module`. The 5 segdisplay
+commits were replayed with original messages/dates (`segdisplay/` →
+`modules/segdisplay/`); the panel lines in 4 HDHomeRun views went into the first
+commit, copied from the source repo's final versions after verifying they
+differed from the branch *only* by those lines. Result is byte-identical to the
+source repo's `segdisplay/` and views. `deploy-segdisplay.sh` resolves paths
+relative to itself, so it still works; the HDHomeRun views themselves are
+deployed by the personal `deploy-to-pi.sh` (backup folder / source repo).
 
 ## 2026-10-20 — consolidation, Music TV backend, font fix
 
