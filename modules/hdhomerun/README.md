@@ -24,9 +24,11 @@ network tuner.
 
 ## Requirements
 
-- An HDHomeRun tuner. Developed against an **EXTEND (HDTC-2US)**; a
-  non-transcoding model (e.g. **DUAL / HDHR-US**) works fine, it just hides
-  the video-quality setting.
+- An HDHomeRun tuner with HTTP streaming. Developed against an **EXTEND
+  (HDTC-2US)**; a current non-transcoding model (CONNECT, FLEX) should work and
+  just hides the video-quality setting. Legacy models (`"Legacy":1` in
+  `discover.json`, e.g. the original **DUAL / HDHR-US**) can't stream over HTTP
+  and are left out of discovery.
 - Python 3 for the guide scanner — **standard library only**, no packages to
   install.
 - An antenna with decent signal. Guide data comes off the air, so a marginal
