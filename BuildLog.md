@@ -31,6 +31,22 @@ Make changes on the feature branch, then `git checkout test-integration && git m
    (generic "current screen / label / playback" from `Main.qml` or AppCore)
    as its own PR; rework `segdisplay` and `announceChannel` onto it.
 
+## 2026-10-20 (later night) — PR 1 opened; PRs 2/3 blocked; legacy tuners
+
+- **PR 1 open: anthonycaccese/240-MP#308** (YouTube shuffle). Every further
+  `gh pr create` fails with "does not have the correct permissions to execute
+  CreatePullRequest", most likely a cap on open PRs from first-time
+  contributors. PR 2/3 bodies are ready in `docs/`. Upstream CONTRIBUTING also
+  asks for a Discussions > Q&A post before big changes, which both of these are.
+- **Legacy HDHomeRuns can't be used at all.** The DUAL (HDHR-US) reports
+  `"Legacy":1`: no HTTP streaming on :5004, no local lineup.json or status.json
+  (lineup is cloud-only). Discovery now skips legacy devices. The earlier
+  "status.json 404 means try it" path was wrong and is gone, and the README's
+  "DUAL works fine" claim was false. Larry confirmed the Tuner list now shows
+  only the two EXTENDs.
+- Fast channel-hopping can briefly show TUNERS BUSY: a device holds a tuner for
+  a few seconds after the stream closes. That's correct behaviour, not a bug.
+
 ## 2026-10-20 (night) — tuner fallback, busy-tuner notice, CRT aspect
 
 **"Channel won't play" was both tuners in use**, not a bug: tuner .94 had one
@@ -41,7 +57,7 @@ tuner on another LAN client (10.0.1.96) and one on the Pi's own boot-time
   order: Tuner, **Backup Tuner** (new setting, default Automatic), then every
   other discovered device carrying the channel (lineups fetched after discovery).
   Non-transcoding devices always sort last (Larry's call: full-rate MPEG-2 is
-  software-decoded on the Pi). No ordered-list setting type exists upstream,
+  software-decoded on the Pi). Legacy devices are excluded entirely (see above). No ordered-list setting type exists upstream,
   hence two list_single settings rather than a full priority list.
 - None free: the guide shows TUNERS BUSY / NO TUNER without trying a stream. A
   stream that still fails shows TUNERS BUSY / PLAY FAILED (status.json re-check).
