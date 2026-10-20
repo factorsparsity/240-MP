@@ -9,14 +9,17 @@
 A new module for HDHomeRun network tuners: live over-the-air TV, plus a
 programme guide built from the broadcast's own PSIP data.
 
-Everything is in `modules/hdhomerun/`:
+**Files**
 
-- manifest, 6 QML views and a logo
-- 3 Python scripts and 4 systemd units
-- 1 mpv Lua script
-- README
-
-There are no changes to the shell, `src/`, `CMakeLists.txt` or `main.cpp`.
+- New `modules/hdhomerun/`:
+  - manifest, 6 QML views and a logo
+  - a Python guide scanner (3 scripts) and an optional nightly systemd timer
+  - an mpv Lua script
+  - README
+- New `src/modules/hdhomerun/HDHomeRunBackend`.
+- One `registerModule` line in `src/main.cpp`, one source line in
+  `CMakeLists.txt`, and `__pycache__/`/`*.pyc` added to `.gitignore`. Running
+  the scanner in place writes bytecode next to it.
 
 **What it does**
 
@@ -27,48 +30,51 @@ There are no changes to the shell, `src/`, `CMakeLists.txt` or `main.cpp`.
   - a detail pane
   - `Start In` chooses which view opens first
 - Backing out of a channel returns to the guide with that channel still selected.
-- Tuner picker (**D** from the channel list), fed by HDHomeRun's discovery service.
-- Optional hardware transcoding on EXTEND models. The default is `internet480`
-  (704x480): that's what a 480i CRT wants, at about a ninth of the 1080p bitrate.
+- **Tuner** setting, filled by UDP broadcast discovery on the LAN (no internet
+  needed). The same list is in an in-module picker (**D** from the channel list),
+  which also opens on its own when no tuner is set.
+- Optional hardware transcoding on EXTEND models. The **Video Quality** setting
+  only appears when the selected tuner has the encoder. The default is
+  `internet480` (704x480): what a 480i CRT wants, at about a ninth of the 1080p
+  bitrate.
+- **Guide scanning from the app.** Pressing **R** in the guide, or **Settings →
+  Rescan Guide Data**, starts a scan in the background. The guide's top-left cell
+  shows its progress (`FINDING 14/35` during the one-time sweep, then
+  `SCANNING 3/12` with a progress bar), then `GUIDE UPDATED`, and the guide
+  reloads.
 - **Per-channel crop memory.** Press the OSC's CROP button on a channel and it
   stays cropped the next time you tune it.
   - Done by `scripts/hdhr-crop.lua` inside mpv, because QML can neither read
     mpv's `panscan` property nor write a file.
   - Channels never cropped by hand still follow the app's `auto_crop` setting.
-  - The script stands down where crop is unavailable, the same condition that
-    hides the OSC button.
 - The live player forwards all eight OSC keys to mpv.
 
-**Pure QML: no backend, no shell changes.** `views/HdhrService.qml` handles the
-lineup fetch, tuning, discovery and guide read. The tuner is a plain HTTP server
-on the LAN: no SDK, account, key, or third-party listings service.
+**Design notes worth your attention**
 
-**Three consequences of having no backend**
-
-These are the trade-offs, and I'd rather you decide than have me hide them. Each
-one goes away with a small C++ backend instead, and I'm happy to write it. The
-Music TV PR, sent alongside this one, shows that shape.
-
-1. **The guide cache is read with `XMLHttpRequest`, so the app needs
-   `QML_XHR_ALLOW_FILE_READ=1`.** Qt blocks local-file GET by default. When it's
-   blocked, *neither* XHR callback fires: no error, no log line, just a silently
-   empty guide. A backend using `QFile` would remove the requirement.
-2. **Guide scanning is a Python script driven by systemd.** QML can't spawn a
-   process, so "Rescan Guide Data" writes a flag that a `.path` unit picks up.
-   - A backend with `QProcess` would make it a normal `action_slot`.
-   - The scanner is standard-library-only Python (no pip install).
-   - It takes a lock, so the nightly timer and an in-app rescan can't collide on
-     the one tuner.
-   - A scan that captures nothing leaves the existing cache alone.
-3. **Tuner choice lives in the module, not in Settings.** A dynamically populated
-   `list_single` needs an `options_slot` on a backend, so the picker is a view
-   reached with **D**. A backend could also do real UDP discovery instead of
-   HDHomeRun's HTTP service, which needs internet.
-
-Also worth mentioning: backend-less modules have to build the data-directory
-path in QML by hand, because `AppCore` exposes `homePath()` but no `dataPath()`.
-A three-line accessor would fix that for good. Say the word and I'll send it
-separately.
+- **A deliberately small backend.** The tuner is a plain HTTP server on the LAN
+  (no SDK, account, key, or listings service), so lineup, tuning and stream URLs
+  stay in `views/HdhrService.qml`. `HDHomeRunBackend` covers only what QML can't
+  do:
+  - Read the guide cache with `QFile`, so the module doesn't need
+    `QML_XHR_ALLOW_FILE_READ`.
+  - Start a scan (`QProcess::startDetached`, so a long scan outlives the app) and
+    report its status.
+  - UDP discovery for the Tuner setting's `options_slot`, plus a `transcode`
+    capability (via `apply_slot`) that gates Video Quality.
+- **The guide scanner stays in Python**, standard library only (no pip install),
+  run as a child process the way yt-dlp is. Every scan goes through one entry
+  point, `epg-rescan-trigger.py`, which scans the configured tuner and holds a
+  lock, so an in-app scan and the nightly timer can't fight over the tuner. A
+  scan that captures nothing leaves the existing cache alone.
+- **Scan feedback lives in the guide**, because settings action rows show no
+  feedback. Running state comes from the scan lock, so scans started by the
+  nightly timer show too. Progress comes from the scan log, which in-app scans
+  write. A generic way for action slots to report a result in Settings would
+  help modules like this one, and YouTube's delete actions too. Happy to propose
+  that separately if you're interested.
+- **Letter keys.** `R`, `C`, `D` and `>` are keyboard shortcuts. Everything they
+  do is also reachable with remote-only navigation: Rescan and Tuner are in
+  Settings, and Start In picks the first view.
 
 **About the guide data**
 
@@ -87,90 +93,71 @@ Two findings that shaped the scanner, both learned the hard way:
   Grouping by major number would silently lose half a station's listings, so the
   scanner sweeps RF once and caches the real map.
 
-A cold scan takes about 90 minutes, mostly the one-time sweep. After that it's a
-nightly job.
+A cold scan takes about 90 minutes, mostly the one-time sweep. After that, scans
+are shorter.
 
 Data and network:
 
-- Output is a JSON cache in the data directory, and the crop memory is one small
-  text file beside it. Nothing is written anywhere else.
-- The only network traffic is the tuner on the LAN, plus HDHomeRun's discovery
-  endpoint when the picker opens.
+- Output is a JSON cache, a scan log and a small crop-memory file, all in the
+  data directory. Nothing is written anywhere else.
+- The only network traffic is to tuners on the LAN.
 
 ## Setup
 
-1. **Enable the module** under **Settings → HDHomeRun**.
-2. **Allow local file reads for the guide.** The app needs
-   `QML_XHR_ALLOW_FILE_READ=1` in its environment. Without it, the guide shows
-   "NO GUIDE DATA" even with a full cache.
-   - With the `install.sh` autostart service, add a drop-in:
-     ```bash
-     sudo mkdir -p /etc/systemd/system/240mp.service.d
-     printf '[Service]\nEnvironment=QML_XHR_ALLOW_FILE_READ=1\n' \
-       | sudo tee /etc/systemd/system/240mp.service.d/hdhomerun.conf
-     sudo systemctl daemon-reload
-     ```
-   - When running by hand: `QML_XHR_ALLOW_FILE_READ=1 240mp`.
-3. **Pick a tuner.** On first open the tuner picker appears by itself, filled
-   from HDHomeRun's discovery service. Press **D** in the channel list to change
-   it later.
-   - Discovery needs internet. Offline, set `device_id` under
-     `modules → com.240mp.hdhomerun` in `config.json`.
-4. **Install the guide scanner units (Linux).** The units in `scripts/` carry
-   placeholders that need filling in before install:
-   - `@USER@`: the user that runs 240-MP
-   - `@MODULE_DIR@`: the module's path
-   - `@HOME@`: that user's home
+The data directory is `~/.local/share/240-MP` on Linux and
+`~/Library/Application Support/240-MP` on macOS.
 
-   For a release install:
+1. **Enable the module** under **Settings → HDHomeRun**.
+2. **Choose a tuner** under **Settings → HDHomeRun → Tuner**. Tuners on the same
+   network are found automatically. Alternatively, open the module: the picker
+   appears by itself the first time, and **D** in the channel list reopens it.
+   - A tuner discovery can't reach (another subnet, say) can be set by IP: put it
+     in `device_id` under `modules → com.240mp.hdhomerun` in `config.json`.
+3. **Build the guide.** Press **R** in the guide, or use **Settings → HDHomeRun →
+   Rescan Guide Data**. Progress shows in the guide's top-left cell. The first
+   scan takes about 90 minutes. Requires `python3`, standard library only.
+4. **Optional: refresh nightly (Linux).** Install the timer. Its units carry
+   placeholders to fill in: `@USER@` (the user that runs 240-MP), `@MODULE_DIR@`
+   (the module's path) and `@HOME@` (that user's home).
    ```bash
    MOD=/opt/240mp/share/240mp/modules/hdhomerun
-   for u in epg-rescan.path epg-rescan.service epg-scan.service epg-scan.timer; do
+   for u in epg-scan.service epg-scan.timer; do
      sed -e "s|@USER@|$USER|g" -e "s|@MODULE_DIR@|$MOD|g" -e "s|@HOME@|$HOME|g" \
        "$MOD/scripts/$u" | sudo tee "/etc/systemd/system/$u" >/dev/null
    done
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now epg-rescan.path epg-scan.timer
+   sudo systemctl daemon-reload && sudo systemctl enable --now epg-scan.timer
    ```
-   - `epg-rescan.path` makes the **Rescan Guide Data** setting work.
-   - `epg-scan.timer` refreshes the guide nightly.
-5. **Run the first scan.** Turn on **Settings → HDHomeRun → Rescan Guide Data**.
-   The first scan takes about 90 minutes: one sweep of the RF band, then a
-   capture per multiplex. Later scans skip the sweep.
-   - On macOS there's no systemd, so run the scanner by hand:
-     ```bash
-     HDHOMERUN_IP=<tuner-ip> \
-     EPG_CACHE_PATH="$HOME/Library/Application Support/240-MP/epg_cache.json" \
-     python3 scripts/epg_scanner.py
-     ```
-6. **Optional:**
-   - **Video Quality** chooses the transcode profile. EXTEND models only; the
-     default is `internet480`.
+5. **Optional settings:**
+   - **Video Quality** (EXTEND tuners only) sets the transcode profile.
    - **Start In** chooses whether the guide or the channel list opens first.
-7. **Crop memory needs no setup.** Toggle CROP in the on-screen controls and the
-   channel remembers it. The values are stored in `hdhr_crop.txt` in the data
-   directory.
-
-The data directory is `~/.local/share/240-MP` on Linux and `~/Library/Application Support/240-MP` on macOS.
+6. **Crop memory needs no setup.** Toggle CROP in the on-screen controls and the
+   channel remembers it.
 
 ## AI involvement
 
-The code was written with Claude Code: the QML views, the PSIP parser, the
-scanner, the crop script and the README. I reviewed it and did all of the
-hardware testing below myself, including the market-wide guide comparison. This
-description was drafted with Claude Code, and I edited it.
+The code was written with Claude Code: the C++ backend, the QML views, the PSIP
+parser, the scanner, the crop script and the README. I reviewed it and did all
+of the hardware testing below myself, including the market-wide guide
+comparison. This description was drafted with Claude Code, and I edited it.
 
 ## Testing
 
 - Platform(s) tested: Raspberry Pi 4B (1GB, arm64, Raspberry Pi OS Trixie),
   release build of this branch on current `main`. Also a macOS source build.
 - Display / output tested: CRT over composite, navigated with a USB remote.
-- Tuner: HDHomeRun EXTEND (HDTC-2US) with a live antenna.
+- Tuners: two HDHomeRun EXTEND (HDTC-2US) and a DUAL (HDHR-US) on one LAN, with
+  a live antenna.
 
 What I tested:
 
-- Channel list, playback, the guide grid, the tuner picker, and both
-  `Start In` values.
+- Channel list, playback, the guide grid, and both `Start In` values.
+- The Tuner setting and the in-module picker listing all three tuners by UDP
+  discovery. Video Quality appearing only for the EXTENDs as the Tuner changes.
+- The guide reading its cache with no `QML_XHR_ALLOW_FILE_READ` in the
+  environment.
+- Starting a scan from Settings and from R; a second request while one runs is
+  refused; the scan survives the app quitting; the guide shows progress and
+  reloads when done.
 - Returning to the guide on the channel just watched.
 - Crop memory: crop a channel, retune it, and an uncropped channel is left alone.
 - Guide scanning against a full market: 2696 events across 48 channels,
@@ -179,8 +166,8 @@ What I tested:
 
 Not tested on Windows, Steam Deck, or Pi 3/5.
 
-Known limits are in the module README: discovery needs internet, weak channels
-yield no listings (their PSIP fails CRC), and a Pi Zero W is too slow.
+Known limits are in the module README: weak channels yield no listings (their
+PSIP fails CRC), and a Pi Zero W is too slow.
 
 ## Checklist
 

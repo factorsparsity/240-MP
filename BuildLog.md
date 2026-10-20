@@ -31,6 +31,51 @@ Make changes on the feature branch, then `git checkout test-integration && git m
    (generic "current screen / label / playback" from `Main.qml` or AppCore)
    as its own PR; rework `segdisplay` and `announceChannel` onto it.
 
+## 2026-10-20 (afternoon) — HDHomeRun backend; Pi GPU crash (OPEN)
+
+**HDHomeRun got a C++ backend** (`src/modules/hdhomerun/HDHomeRunBackend`),
+because the pure-QML version only worked with manual system setup that no stock
+install has: `QML_XHR_ALLOW_FILE_READ=1` for the guide cache (silently "NO GUIDE
+DATA" without it), and a systemd `.path` unit for Rescan. Now:
+- `read_guide()` reads the cache with QFile — no env var needed.
+- Rescan is a settings `action` + **R** in the guide → `start_guide_scan()`
+  (detached QProcess, outlives the app). `epg-rescan.path/.service` deleted;
+  `epg-rescan-trigger.py` has no flag handshake — it always scans (locked).
+  **Any box that still has `epg-rescan.path` enabled must have it removed**: it
+  fires on every config.json write, and the trigger would now scan each time.
+- UDP discovery (code from the original Jul C++ backend) → `Tuner` dynamic
+  setting + in-module picker. Labels "EXTEND <ip>" (the settings row truncates;
+  two EXTENDs looked identical). Video Quality gated by `requires_capability:
+  transcode`, refreshed by `apply_slot`.
+- Settings action rows give NO feedback upstream (none of the existing action
+  buttons do), so scan state shows in the guide's top-left cell:
+  `FINDING i/N` (one-time RF sweep) / `SCANNING i/N` + bar, then `GUIDE UPDATED`
+  and reload. Running = scan lock held (flock probe, so timer scans show too);
+  progress = `epg_scan.log` (in-app scans only). First placement (header row,
+  left of clock) collided with the "GUIDE" subtitle — the grid's empty top-left
+  cell is the spot.
+- A `__pycache__/*.pyc` got committed by accident; `.gitignore` now covers it.
+
+**OPEN — Pi: every Qt Quick build segfaults in Mesa on the first frame.**
+Started 13:16 on the first run of the new build; persists across reboots.
+Backtrace: `QSGRenderThread` → `QRhi::endFrame` → `libgallium-25.0.7-2+rpt4`.
+Ruled out: our code (the untouched Aug release build crashes too), user data
+(empty DATA_ROOT crashes), the segdisplay Main.qml hook (unpatched copy
+crashes), Mesa shader cache (MESA_SHADER_CACHE_DISABLE), Qt pipeline cache
+(moved aside to /tmp), package updates (none today), display (composite only).
+`QT_QUICK_BACKEND=software` works. Each crash triggered `240mp-stop` → poweroff.
+Current mitigation on the Pi:
+- `/etc/systemd/system/240mp.service.d/50-software-render.conf` (software Qt
+  Quick rendering; video unaffected — mpv renders itself).
+- `99-recovery-no-poweroff.conf` (clears ExecStopPost) — **quit no longer powers
+  off** until this is removed.
+- Builds: `/opt/240mp` = current, `/opt/240mp.prev` = 12:12 build,
+  `/opt/240mp.bak-2026-10-20` = original Aug release.
+Next: cold power cycle (unplug 30s) and retest the GPU path; if still broken,
+install Mesa debug symbols for a readable backtrace. Remove both drop-ins once
+fixed. Recovery pattern that worked: an SSH loop that installs the
+no-poweroff drop-in the moment the Pi answers after boot.
+
 ## 2026-10-20 (evening) — deployed test-integration to the Pi
 
 **Pi:** `vcr@240mp.local` (10.0.1.28; key `~/.ssh/id_ed25519_pi240mp`; the raw IP
