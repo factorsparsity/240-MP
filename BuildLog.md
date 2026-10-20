@@ -31,7 +31,26 @@ Make changes on the feature branch, then `git checkout test-integration && git m
    (generic "current screen / label / playback" from `Main.qml` or AppCore)
    as its own PR; rework `segdisplay` and `announceChannel` onto it.
 
-## 2026-10-20 (afternoon) — HDHomeRun backend; Pi GPU crash (OPEN)
+## 2026-10-20 (late) — Pi GPU crash: root cause + workaround
+
+**Mesa segfaults when a shader effect samples an Image that lives in Qt's
+texture atlas.** Found by bisecting with a one-file Qt Quick app on the Pi
+(`~/qtmin`, takes a .qml path): a plain Rectangle, the VCR/Unifont fonts and
+`logo.svg` all render fine on the GPU; `MultiEffect` (or a plain `ShaderEffect`)
+whose source is an `Image` (PNG or SVG) segfaults; the same effect on a
+Rectangle source works. 240-MP hits it via `views/Components/AppBar.qml`
+(MultiEffect colorizes the module icons), so every build crashed on frame one.
+**Workaround:** `QSG_ATLAS_SIZE_LIMIT=1` keeps images out of the atlas; the full
+app then runs on the GPU. Pi drop-in `50-no-texture-atlas.conf` replaces
+`50-software-render.conf` (moved to `~/50-software-render.conf.off`).
+Not explained: why it began today (kernel 6.18.34 from Jun, Mesa unchanged per
+apt; the Pi uses upstream's recommended `vc4-fkms-v3d` overlay). Possible
+upstream note: Pi 4 + fkms + Mesa 25.0.7 users can hit this; the env var could go
+in the launcher, or AppBar could avoid sampling an atlased Image
+(e.g. `layer.enabled` on the icon). `99-recovery-no-poweroff.conf` stays until
+the GPU path has run a while without crashing.
+
+## 2026-10-20 (afternoon) — HDHomeRun backend; Pi GPU crash (solved later)
 
 **HDHomeRun got a C++ backend** (`src/modules/hdhomerun/HDHomeRunBackend`),
 because the pure-QML version only worked with manual system setup that no stock
@@ -56,7 +75,7 @@ DATA" without it), and a systemd `.path` unit for Rescan. Now:
   cell is the spot.
 - A `__pycache__/*.pyc` got committed by accident; `.gitignore` now covers it.
 
-**OPEN — Pi: every Qt Quick build segfaults in Mesa on the first frame.**
+**(Solved — see "late" entry.) Pi: every Qt Quick build segfaults in Mesa on the first frame.**
 Started 13:16 on the first run of the new build; persists across reboots.
 Backtrace: `QSGRenderThread` → `QRhi::endFrame` → `libgallium-25.0.7-2+rpt4`.
 Ruled out: our code (the untouched Aug release build crashes too), user data
