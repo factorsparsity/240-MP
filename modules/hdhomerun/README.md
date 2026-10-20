@@ -71,9 +71,6 @@ sudo cp scripts/epg-rescan.{path,service} /etc/systemd/system/
 sudo systemctl enable --now epg-rescan.path
 ```
 
-The module's source repo ships a `deploy-to-pi.sh` that does all of the above
-over SSH, including the placeholder substitution.
-
 Note that video playback needs the Pi's own console — mpv draws to the
 framebuffer and cannot take the screen over SSH.
 
