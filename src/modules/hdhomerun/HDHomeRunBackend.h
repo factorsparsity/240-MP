@@ -44,8 +44,9 @@ public:
     // the item in progress (1-based), so steps finished is step - 1.
     Q_INVOKABLE QVariantMap scan_status() const;
 
-    // "Tuner" options_slot: emits dynamicOptionsReady("device_id", [{id, label}])
-    // and the "transcode" capability for the selected tuner.
+    // "Tuner" and "Backup Tuner" options_slot: emits dynamicOptionsReady for
+    // "device_id" and "backup_device_id" ([{id, label}], the latter with an
+    // "auto" entry first) and the "transcode" capability for the selected tuner.
     Q_INVOKABLE void get_devices();
 
     // "Tuner" apply_slot: re-evaluates the "transcode" capability for the newly
