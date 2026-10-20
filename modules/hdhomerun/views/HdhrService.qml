@@ -223,7 +223,12 @@ QtObject {
             if (n > 0)
                 console.log("[HDHomeRun] using " + c.ip + "; earlier choices have no free tuner")
             _streamFrom(c)
-        }, function() { _tuneFirstFree(candidates, n + 1, anyReachable) })
+        }, function(msg) {
+            // Older firmware (the DUAL here) has no status.json: the device is
+            // up but can't say whether a tuner is free, so try it.
+            if (msg === "HTTP 404") _streamFrom(c)
+            else _tuneFirstFree(candidates, n + 1, anyReachable)
+        })
     }
 
     function _streamFrom(c) {
@@ -279,7 +284,7 @@ QtObject {
                              && tuners.every(function(t) { return t.TargetIP !== undefined })
                      playFailure = busy ? "TUNERS BUSY" : "PLAY FAILED"
                  },
-                 function() { playFailure = "NO TUNER" })
+                 function(msg) { playFailure = msg === "HTTP 404" ? "PLAY FAILED" : "NO TUNER" })
     }
 
     // "started" | "running" | "failed"; see HDHomeRunBackend::start_guide_scan.
