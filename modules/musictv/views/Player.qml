@@ -22,7 +22,7 @@ FocusScope {
     signal goBack()
 
     // Rotation
-    property var  music:    []      // cached entries, see scripts/musictv_fetch.py
+    property var  music:    []      // pools from musictvBackend
     property var  bumpers:  []
     property var  queue:    []      // the interleaved playlist handed to mpv
     property int  queuePos: 0
@@ -41,14 +41,10 @@ FocusScope {
     // Paths
     // ---
 
-    // 240-MP's dataRoot. Mirrors the C++ default (QStandardPaths AppDataLocation);
-    // a DATA_ROOT override is invisible from QML, so a non-default data dir needs
-    // the Music TV files in the standard spot.
+    // 240-MP's dataRoot, from the backend so the overlay script reads the same
+    // cache the backend writes.
     function _dataRoot() {
-        var home = appCore.homePath()
-        return Qt.platform.os === "osx"
-            ? home + "/Library/Application Support/240-MP"
-            : home + "/.local/share/240-MP"
+        return musictvBackend.data_root()
     }
 
     // Filesystem path of this module's directory (…/modules/musictv), derived from
@@ -135,22 +131,27 @@ FocusScope {
             "--script-opts-append=musictv-cache=" + _dataRoot() + "/musictv_cache.json",
             "--script-opts-append=musictv-bugs=" + _dataRoot() + "/musictv_bugs",
             "--script-opts-append=musictv-titles=" + (settingOn("show_titles") ? "1" : "0"),
-            "--script-opts-append=musictv-bug=" + (settingOn("show_screenbug") ? "1" : "0")
+            "--script-opts-append=musictv-bug=" + (settingOn("show_screenbug") ? "1" : "0"),
+            "--script-opts-append=musictv-font=" + titleFont()
         ]
-        // macOS libass uses the coretext provider and never sees a Linux font
-        // directory; on Linux mpv already gets a fontconfig override that
-        // includes the system config, so the font installed in the user font
-        // dir is found and passing this would clobber the app's own OSD font dir.
-        if (Qt.platform.os === "osx")
-            args.push("--osd-fonts-dir=" + dir + "/assets/fonts")
+        // No --osd-fonts-dir: MpvController appends its own (for the OSC font)
+        // after extraArgs and mpv keeps only the last one, so the title font has
+        // to be installed in the user font directory instead. See README.
         return args
+    }
+
+    // Family name handed to the overlay. Kabel is not shipped (commercial
+    // licence); choosing it assumes the user has installed their own copy.
+    function titleFont() {
+        var font = appCore.get_setting(moduleRoot.moduleId, "title_font") || "Josefin Sans"
+        return font === "Kabel" ? "Kabel" : "Josefin Sans SemiBold"
     }
 
     function startPlayback() {
         queue = buildQueue()
         if (queue.length === 0) {
-            errorMessage = "NO MUSIC VIDEOS IN THE CACHE\n\n" +
-                           "ADD PLAYLISTS TO musictv_playlists.txt AND RUN musictv_fetch.py"
+            errorMessage = "NO MUSIC VIDEOS FOUND\n\n" +
+                           "ADD PLAYLISTS TO musictv_playlists.txt"
             return
         }
         queuePos = 0
@@ -180,48 +181,38 @@ FocusScope {
     }
 
     // ---
-    // Cache loading
+    // Pools
     // ---
 
-    // Reads musictv_cache.json, written by scripts/musictv_fetch.py.
-    //
-    // REQUIRES QML_XHR_ALLOW_FILE_READ=1 in the app's environment. Without it Qt
-    // blocks local-file GET and *neither* callback fires — no exception, no error
-    // branch, so the only symptom is this view sitting on its status text
-    // forever. The launcher and the systemd drop-in both set it; see README.
-    function loadCache() {
-        var path = _dataRoot() + "/musictv_cache.json"
-        var xhr = new XMLHttpRequest()
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState !== XMLHttpRequest.DONE)
-                return
-            // A file:// GET reports status 0 on success.
-            if (xhr.status !== 200 && xhr.status !== 0) {
-                errorMessage = "NO PLAYLIST CACHE\n\nRUN musictv_fetch.py TO BUILD IT"
-                return
-            }
-            var data
-            try {
-                data = JSON.parse(xhr.responseText)
-            } catch (e) {
-                errorMessage = "PLAYLIST CACHE IS UNREADABLE\n\nRE-RUN musictv_fetch.py"
-                return
-            }
-            music   = data.music   || []
-            bumpers = data.bumpers || []
-            console.log("[MusicTV] cache: " + music.length + " music, " + bumpers.length + " bumpers")
-            if (music.length === 0) {
-                errorMessage = "NO MUSIC VIDEOS IN THE CACHE\n\n" +
-                               "ADD PLAYLISTS TO musictv_playlists.txt AND RUN musictv_fetch.py"
-                return
-            }
-            startTimer.restart()
-        }
-        xhr.open("GET", "file://" + path)
-        xhr.send()
+    // musictvBackend lists the playlists with yt-dlp — only when an input file
+    // changed or the cache is a day old, otherwise straight from the cache — and
+    // answers with poolsLoaded or errorOccurred.
+    function loadPools() {
+        errorMessage = ""
+        statusMessage = "TUNING IN..."
+        musictvBackend.load()
     }
 
-    Component.onCompleted: loadCache()
+    Component.onCompleted: loadPools()
+
+    Connections {
+        target: musictvBackend
+
+        function onRefreshStarted() {
+            playerRoot.statusMessage = "UPDATING PLAYLISTS..."
+        }
+
+        function onPoolsLoaded(music, bumpers) {
+            playerRoot.music   = music
+            playerRoot.bumpers = bumpers
+            console.log("[MusicTV] pools: " + music.length + " music, " + bumpers.length + " bumpers")
+            startTimer.restart()
+        }
+
+        function onErrorOccurred(message) {
+            playerRoot.errorMessage = message
+        }
+    }
 
     // ---
     // mpv
@@ -261,8 +252,7 @@ FocusScope {
                 goBack()
                 event.accepted = true
             } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                errorMessage = ""
-                loadCache()
+                loadPools()
                 event.accepted = true
             }
         } else if (event.key === Qt.Key_Escape || event.key === Qt.Key_Back) {

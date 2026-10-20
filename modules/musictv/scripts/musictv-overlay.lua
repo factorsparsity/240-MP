@@ -5,7 +5,7 @@
 -- builds its own --script-opts and a second flag would replace it, not append).
 --
 -- Options (all prefixed musictv-):
---   musictv-cache=<path>   musictv_cache.json written by musictv_fetch.py — supplies the
+--   musictv-cache=<path>   musictv_cache.json written by MusicTvBackend — supplies the
 --                      artist/song/album/label/director lines, keyed by video id
 --   musictv-bugs=<dir>     directory of pre-converted .bgra bugs (see musictv_bugs.py)
 --   musictv-titles=0|1     title card on/off
