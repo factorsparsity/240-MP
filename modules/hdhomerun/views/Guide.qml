@@ -17,6 +17,10 @@ FocusScope {
     id: guideRoot
 
     property var navParams: ({})
+    // Set by Root.navigateBack() from the listState this view pushed on its way
+    // out, so coming back from a channel lands on that channel rather than at
+    // the top of the lineup. Same contract Channels.qml uses.
+    property var navListState: navParams.navListState || ({})
 
     // Injected by Root.qml — see HdhrService.qml.
     property var hdhr
@@ -105,6 +109,22 @@ FocusScope {
         return list === undefined ? [] : list
     }
 
+    // Whether anything at all lands inside the visible time window. A channel can
+    // have hundreds of cached events and still show an empty row, because the
+    // cache went stale and every one of them ended hours ago — which is not the
+    // same thing as having no data, and the row says so either way.
+    function hasEventsInWindow(guideNumber) {
+        var evs = eventsFor(guideNumber)
+        var start = windowStart.getTime()
+        var end = start + windowMinutes * 60000
+        for (var i = 0; i < evs.length; i++) {
+            if (new Date(evs[i].end).getTime() > start
+                    && new Date(evs[i].start).getTime() < end)
+                return true
+        }
+        return false
+    }
+
     function currentChannelNumber() {
         if (currentChannel < 0 || currentChannel >= channels.length) return ""
         return channels[currentChannel].guideNumber
@@ -144,6 +164,16 @@ FocusScope {
         function onChannelsLoaded(items) {
             guideRoot.channels = items
             guideRoot.channelsReady = true
+            if (items.length > 0) {
+                var restore = (guideRoot.navListState.currentIndex !== undefined)
+                            ? guideRoot.navListState.currentIndex : 0
+                guideRoot.currentChannel = Math.min(restore, items.length - 1)
+                // forceLayout first: the model was assigned a line ago, so the
+                // delegates positionViewAtIndex needs do not exist yet and the
+                // scroll would silently do nothing.
+                channelColumn.forceLayout()
+                channelColumn.positionViewAtIndex(guideRoot.currentChannel, ListView.Contain)
+            }
             guideRoot.currentEvent = guideRoot.eventIndexAt(guideRoot.currentChannelNumber(),
                                                            guideRoot.windowStart)
         }
@@ -363,6 +393,21 @@ FocusScope {
                     width: grid.laneWidth
                     height: parent.height
                     clip: true
+
+                    // A row with nothing in the current window used to render as
+                    // empty space, which is indistinguishable from a broken grid
+                    // — it cost a real debugging session before the cause turned
+                    // out to be guide data that had simply expired. Say so.
+                    Text {
+                        anchors.fill: parent
+                        anchors.leftMargin: root.sw * 0.004
+                        verticalAlignment: Text.AlignVCenter
+                        visible: !guideRoot.hasEventsInWindow(rowItem.guideNumber)
+                        text: "NO GUIDE DATA"
+                        color: root.tertiaryColor
+                        font.family: root.globalFont
+                        font.pixelSize: root.sh * 0.0375
+                    }
 
                     Repeater {
                         model: guideRoot.eventsFor(rowItem.guideNumber)

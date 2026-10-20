@@ -158,12 +158,25 @@ def main():
             return 1
 
     guide = cache.get("channels", {})
+    scanned = 0
     for rf in sorted(rf_map, key=int):
         print(f"Scanning RF {rf} ({', '.join(rf_map[rf])})...", flush=True)
         try:
             guide.update(psip.scan_multiplex(stream_url(rf), CAPTURE_SECONDS))
+            scanned += 1
         except Exception as e:
             print(f"  failed on RF {rf}: {e}", file=sys.stderr)
+
+    # Capturing nothing at all is not a scan. Saving anyway rewrites the cache
+    # with what was already in it, which is harmless to the *contents* but makes
+    # the file's mtime claim a freshness it does not have — and that is exactly
+    # what hid a day-old guide behind an hour-old timestamp once already. The
+    # usual cause is a second scan holding the tuner, so every RF returns 503
+    # and the whole run takes about a second.
+    if scanned == 0:
+        print("No multiplex could be captured — tuner busy, or no signal. "
+              "Leaving the existing cache untouched.", file=sys.stderr)
+        return 1
 
     save_cache({"_multiplexes": rf_map, "channels": guide})
     total = sum(len(v) for v in guide.values())
