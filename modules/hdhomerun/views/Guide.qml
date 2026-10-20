@@ -59,7 +59,7 @@ FocusScope {
     // Guide-scan feedback. A scan runs for up to 90 minutes in the background
     // and Settings action rows show nothing, so the guide is where its state is
     // shown: polled while open, with a reload once it finishes.
-    property var scanStatus: ({ running: false, detail: "", updatedMs: 0 })
+    property var scanStatus: ({ running: false, phase: "", step: 0, total: 0, updatedMs: 0 })
     property string scanNotice: ""      // transient, after R or a finished scan
 
     function refreshScanStatus() {
@@ -356,13 +356,39 @@ FocusScope {
             height: grid.rowHeight
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
-            text: guideRoot.scanNotice !== "" ? guideRoot.scanNotice
-                  : !guideRoot.scanStatus.running ? ""
-                  : guideRoot.scanStatus.detail === "FINDING CHANNELS" ? "FINDING CHANNELS"
-                  : "SCANNING" + (guideRoot.scanStatus.detail ? " " + guideRoot.scanStatus.detail : "...")
+            text: {
+                var st = guideRoot.scanStatus
+                if (guideRoot.scanNotice !== "") return guideRoot.scanNotice
+                if (!st.running) return ""
+                if (st.total === 0) return "SCANNING..."
+                // FINDING: the one-time RF sweep; SCANNING: capturing each multiplex.
+                return (st.phase === "sweep" ? "FINDING " : "SCANNING ") + st.step + "/" + st.total
+            }
             color: root.accentColor
             font.family: root.globalFont
             font.pixelSize: root.sh * 0.0333333
+        }
+
+        // Progress bar along the bottom of the same cell, per phase.
+        Rectangle {
+            id: scanTrack
+            visible: guideRoot.scanStatus.running && guideRoot.scanStatus.total > 0
+                     && guideRoot.scanNotice === ""
+            x: 0
+            y: grid.rowHeight - height - root.sh * 0.006
+            width: scanLine.width
+            height: Math.max(2, root.sh * 0.008)
+            color: root.tertiaryColor
+            opacity: 0.35
+        }
+        Rectangle {
+            visible: scanTrack.visible
+            x: 0
+            y: scanTrack.y
+            height: scanTrack.height
+            width: scanTrack.width * Math.max(0, guideRoot.scanStatus.step - 1)
+                   / Math.max(1, guideRoot.scanStatus.total)
+            color: root.accentColor
         }
 
         // Time header

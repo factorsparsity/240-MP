@@ -37,10 +37,11 @@ public:
     // "started", "running" (one already holds the scan lock) or "failed".
     Q_INVOKABLE QString start_guide_scan();
 
-    // { running: bool, detail: "3/12" | "FINDING CHANNELS" | "",
+    // { running: bool, phase: "sweep" | "capture" | "", step: int, total: int,
     //   updatedMs: epg_cache.json mtime (0 if none) }. Running is read from the
-    // scan lock, so it also covers scans started by the nightly timer; detail
-    // comes from epg_scan.log, which only in-app scans write.
+    // scan lock, so it also covers scans started by the nightly timer; phase and
+    // progress come from epg_scan.log, which only in-app scans write. step is
+    // the item in progress (1-based), so steps finished is step - 1.
     Q_INVOKABLE QVariantMap scan_status() const;
 
     // "Tuner" options_slot: emits dynamicOptionsReady("device_id", [{id, label}])

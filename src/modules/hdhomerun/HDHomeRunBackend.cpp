@@ -82,24 +82,31 @@ QVariantMap HDHomeRunBackend::scan_status() const {
     const QFileInfo cache(m_dataRoot + "/epg_cache.json");
     st["updatedMs"] = cache.exists() ? cache.lastModified().toMSecsSinceEpoch() : qint64(0);
 
-    QString detail;
+    QString phase;
+    int step = 0, total = 0;
     QFile log(m_dataRoot + "/epg_scan.log");
     if (running && log.open(QIODevice::ReadOnly)) {
-        // Only the current run matters, and it is at the end of the file.
+        // Only the current run matters, and it is at the end of the file. The
+        // scanner prints "Probing RF n [i/N]" during the one-time sweep, then
+        // "Scanning RF n [i/N] (...)" per multiplex; the last such line wins.
         log.seek(qMax<qint64>(0, log.size() - 16384));
         const QString tail = QString::fromUtf8(log.readAll());
         const QString run = tail.mid(qMax(0, tail.lastIndexOf("scan starting")));
-        static const QRegularExpression progress(QStringLiteral(R"(Scanning RF \d+ \[(\d+)/(\d+)\])"));
+        static const QRegularExpression progress(
+            QStringLiteral(R"((Probing|Scanning) RF \d+ \[(\d+)/(\d+)\])"));
         QRegularExpressionMatchIterator it = progress.globalMatch(run);
         QRegularExpressionMatch last;
         while (it.hasNext())
             last = it.next();
-        if (last.hasMatch())
-            detail = last.captured(1) + "/" + last.captured(2);
-        else if (run.contains("sweeping RF"))
-            detail = QStringLiteral("FINDING CHANNELS");
+        if (last.hasMatch()) {
+            phase = last.captured(1) == QLatin1String("Probing") ? "sweep" : "capture";
+            step  = last.captured(2).toInt();
+            total = last.captured(3).toInt();
+        }
     }
-    st["detail"] = detail;
+    st["phase"] = phase;
+    st["step"]  = step;
+    st["total"] = total;
     return st;
 }
 
