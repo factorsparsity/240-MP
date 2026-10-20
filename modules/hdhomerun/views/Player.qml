@@ -60,6 +60,9 @@ FocusScope {
     function tune() {
         if (!channel.guideNumber) { goBack(); return }
         playbackStarted = false
+        // Live TV has no elapsed time worth showing, so the front panel stays on
+        // the channel number for the whole session.
+        hdhr.announceChannel(channel.guideNumber)
         hdhr.tune_channel(channel.guideNumber)
     }
 

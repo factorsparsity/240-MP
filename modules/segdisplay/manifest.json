@@ -1,0 +1,105 @@
+{
+  "id": "com.240mp.segdisplay",
+  "name": "Front Panel",
+  "icon": "assets/images/logo.svg",
+  "version": "1.0",
+  "entry_point_qml": "views/Root.qml",
+
+  "settings": [
+    {
+      "key": "enabled",
+      "label": "Enabled",
+      "type": "toggle",
+      "default": "ON"
+    },
+    {
+      "key": "brightness",
+      "label": "Brightness",
+      "type": "list_single",
+      "options": ["Low", "Medium", "High", "Max"],
+      "default": "Medium"
+    },
+    {
+      "key": "ghost_segments",
+      "label": "Ghost Unlit Segments",
+      "type": "list_single",
+      "options": ["Off", "Faint", "Medium", "Strong"],
+      "default": "Off",
+      "description": "Draw the unlit segments dimly, the way a real LED panel shows a faint 8888 behind the digits. An OLED has no per-pixel brightness, so this is a dot spacing: Faint lights 1 pixel in 16, Strong 1 in 4."
+    },
+    {
+      "key": "idle_clock",
+      "label": "Clock When Idle",
+      "type": "toggle",
+      "default": "ON",
+      "description": "Show the time of day whenever nothing else is on the panel. Off leaves the display dark instead."
+    },
+    {
+      "key": "clock_24h",
+      "label": "24-Hour Clock",
+      "type": "toggle",
+      "default": "OFF"
+    },
+    {
+      "key": "show_hdhomerun",
+      "label": "Show For HDHomeRun",
+      "type": "toggle",
+      "default": "ON",
+      "description": "HDHomeRun shows the channel number rather than a timer, including while a channel is playing."
+    },
+    {
+      "key": "show_musictv",
+      "label": "Show For Music TV",
+      "type": "toggle",
+      "default": "ON"
+    },
+    {
+      "key": "show_youtube",
+      "label": "Show For YouTube",
+      "type": "toggle",
+      "default": "ON"
+    },
+    {
+      "key": "show_plex",
+      "label": "Show For Plex",
+      "type": "toggle",
+      "default": "ON"
+    },
+    {
+      "key": "show_jellyfin",
+      "label": "Show For Jellyfin",
+      "type": "toggle",
+      "default": "ON"
+    },
+    {
+      "key": "show_emby",
+      "label": "Show For Emby",
+      "type": "toggle",
+      "default": "ON"
+    },
+    {
+      "key": "show_local_files",
+      "label": "Show For Local Files",
+      "type": "toggle",
+      "default": "ON"
+    },
+    {
+      "key": "show_nfc_reader",
+      "label": "Show For NFC Reader",
+      "type": "toggle",
+      "default": "ON"
+    },
+    {
+      "key": "show_ambient_mode",
+      "label": "Show For Ambient Mode",
+      "type": "toggle",
+      "default": "ON"
+    },
+    {
+      "key": "show_weather",
+      "label": "Show For Weather",
+      "type": "toggle",
+      "default": "ON"
+    }
+  ]
+}

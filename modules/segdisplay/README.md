@@ -1,0 +1,184 @@
+# Front Panel — SSD1306 OLED, drawn as a 7-segment display
+
+Drives a **0.91" SSD1306 128x32 I2C OLED** (address `0x3C`) from a Raspberry Pi
+running 240-MP, painting four 7-segment digits into the frame buffer so the
+cable box's front panel shows something real:
+
+| Where you are | What the panel shows |
+|---|---|
+| Any of the app's menus | the highlighted row — `HDHOMERUN`, `PLEX`, `COLOR SCHEME` |
+| The setup screen, nothing highlighted | `SETUP` |
+| HDHomeRun (browsing or watching) | the channel, decimal point and all — `9.1`, `12.10` |
+| Weather | temperature in big digits, condition and hi/lo beside it |
+| Any other playback module | elapsed time, `MM:SS` under an hour, `H:MM` over it |
+| Anywhere else | the time of day, colon blinking |
+
+Priority when several could apply: **menu label > setup > channel > weather >
+elapsed > clock > blank**. The menu label leads because it is the only rung that
+is feedback rather than status — it answers a keypress, and a panel that lags
+the keypress is worse than one that says nothing.
+
+Every module can be switched off individually in
+**Settings → Modules → Front Panel**.
+
+**This replaced a VK16K33/HT16K33 4-digit LED module**, which never worked on
+the bench. The behaviour above is unchanged from that design; only the hardware
+layer is new. Drawing the glyphs instead of lighting bars also buys three things
+the LED board could not do:
+
+- **Decimal points that definitely exist.** Half the 4-digit "clock" boards on
+  the market carry a colon and no per-digit points, and `12.10` needs one.
+- **Ghost segments** (`Ghost Unlit Segments`: Off / Faint / Medium / Strong) —
+  the unlit segments drawn dimly, the way a real LED panel shows a faint `8888`
+  behind the digits. A mono OLED has no per-pixel brightness, so the level is a
+  dot spacing: Strong lights 1 pixel in 4 (25%), Medium 1 in 9 (11%), Faint 1 in
+  16 (6%). It began as a toggle at the Strong density and that was far too bright
+  on real glass — hence a level, and hence Off by default.
+- **Burn-in protection.** The whole layout shifts by up to two pixels every five
+  minutes. An idle clock is exactly the static image that burns an OLED, and
+  this box is meant to sit powered on.
+- **Words.** Menu labels, `SETUP` and weather conditions get a real 5x7 font,
+  because seven segments can spell almost nothing. Anything that is
+  fundamentally a *number* — channel, clock, timer, temperature — still gets the
+  7-segment glyphs; that is the panel's character, not a limitation to route
+  around.
+
+Menu labels are always drawn at one size (`LABEL_SCALE = 4`, so 20x28 glyphs,
+about five characters across). Labels are **never** scaled to fit: sizing each
+one to its own length made the panel jump between two type sizes as the cursor
+moved, which reads as a glitch rather than as a design. Anything wider than the
+panel parks for 1.2s, scrolls left at 44 px/s, parks at the end, and starts over
+— the standard trick for a narrow panel. `LABEL_SCALE = 3` is the knob if you
+want ~7 characters at 21px instead.
+
+## Weather
+
+The daemon fetches its own conditions from open-meteo (no API key) using the
+first line of `weather_location.txt` — the same file the app's weather module
+reads, so the panel can never disagree with the screen about where you are. It
+follows that module's Metric/US setting too.
+
+It has to fetch its own: 240-MP keeps weather data in C++ (`WeatherBackend`)
+with nothing reachable from module QML, and the weather module's background
+music runs on a private mpv, so not even the elapsed-timer rung fires there.
+The upside is that the panel needs no patch to upstream's weather views, which
+an upgrade would revert.
+
+Layout is a big 7-segment temperature (three cells, right-aligned, so `-12` and
+`100` both fit without the layout moving) then a degree ring, then two rows of
+text: the WMO condition shortened to 11 characters, and `H80 L66`.
+
+## Wiring
+
+| Module | Pi pin | Signal |
+|---|---|---|
+| `GND` | 6 | GND |
+| `VCC` | 1 (3V3) | 3.3 V |
+| `SDA` | 3 | GPIO2 / SDA1 |
+| `SCL` | 5 | GPIO3 / SCL1 |
+
+Power from 3V3. SSD1306 breakouts have an onboard regulator and charge pump and
+run fine at 3.3 V, and the Pi's I2C lines never swing higher — so unlike the LED
+board this replaced, there is no level-shifting question to get wrong.
+
+`deploy-segdisplay.sh` handles the two Pi-side prerequisites (`dtparam=i2c_arm=on`
+and `i2c` group membership), both of which need a reboot.
+
+Two environment variables in `segdisplay.service` cover the board-to-board
+differences: `SEGDISPLAY_I2C_ADDR=0x3D` for a panel strapped to the alternate
+address, and `SEGDISPLAY_FLIP=1` for one mounted upside down in the bezel.
+
+## Install
+
+```bash
+./deploy-segdisplay.sh [user@host]      # default vcr@240mp.local
+```
+
+Copies the module to `<appRoot>/modules/segdisplay/`, installs and starts
+`segdisplay.service`, and patches upstream's `Main.qml`.
+
+**Re-run it after every 240-MP upgrade.** The module directory survives an
+upgrade, but `Main.qml` does not — and without the patch the panel falls back to
+showing only the clock, silently.
+
+## How it works
+
+240-MP has no GPIO/I2C code, and its QML can neither spawn a process nor write a
+file. So:
+
+- `scripts/segdisplay.py` is a small stdlib-only daemon — no `smbus2`, no
+  `luma.oled`, no PIL. It owns the I2C bus and listens on `127.0.0.1:8377`. It
+  reads its own settings straight out of 240-MP's `config.json`, so the
+  per-module toggles need no plumbing.
+- `views/SegHook.qml` is loaded once from `Main.qml` and POSTs the current view
+  path, the highlighted menu row, and mpv's playback position. It uses
+  `mpvController`'s existing `positionChanged` / `playbackEnded` signals, which
+  is why every playback module — including ones this project did not write —
+  gets a timer for free.
+- The highlighted row is found by walking the item tree under `moduleLoader.item`
+  for anything with a `currentIndex` and an array `model`, then reading
+  `name`/`label`/`title`/`text` off the current row. Duck-typed on purpose: the
+  app's lists keep their ids private to their own component, and this way a
+  screen upstream adds later works with no change here — and one that is not a
+  list simply yields nothing.
+- `views/HdhrService.qml` (the HDHomeRun module) POSTs the channel number as the
+  cursor moves and when a channel is tuned.
+- `views/Root.qml` is a status screen: is the daemon up, did the device answer,
+  what is on the panel right now, and `T` for a display test.
+
+Priority when several could apply: **setup > channel > elapsed > clock > blank**.
+HDHomeRun stays on the channel even during playback — live TV has no elapsed
+time worth showing.
+
+The glyphs are rectangles, not a bitmap font: a digit is 20x30 with a 4-pixel
+stroke, and the seven segment rectangles are indexed by the same `a..g` bit
+order the HT16K33 font used, so `encode()` and the font survived the hardware
+change untouched. Four digits, two 5-pixel gaps and one 9-pixel colon gap come
+to 99 of the 128 columns; the slack is what the burn-in shift moves into.
+
+## Bring-up and debugging
+
+```bash
+python3 segdisplay.py --probe            # does 0x3C answer?
+python3 segdisplay.py --test             # all pixels, each segment, 8.8.8.8 + colon
+python3 segdisplay.py --show 12.10       # or "03:47"; add --ghost
+python3 segdisplay.py --label HDHOMERUN  # a menu label, auto-scaled
+python3 segdisplay.py --weather          # live fetch — proves the file and the route
+python3 segdisplay.py --clear
+journalctl -u segdisplay.service -f
+```
+
+These write straight to the bus while the daemon is also running, so the frame
+they leave stays up only until the daemon's next scene change. Harmless — I2C
+tolerates the interleaving — but it is why `--show` appears to "stick" and then
+vanish a minute later.
+
+`--weather` is the one that isolates weather faults: it prints the reading, or
+the reason there is none. `/status` also carries `weather_error`, and a fresh
+boot legitimately shows `Temporary failure in name resolution` until the network
+is up, or an occasional `HTTP Error 503` from open-meteo.
+
+Neither should reach the panel: the last good reading is cached in
+`segdisplay_weather.json` (data dir, good for 3 hours) and loaded at startup, and
+retries back off from 10s rather than a flat minute. If the weather screen shows
+the **clock**, it means there is no reading at all — no cache and every fetch
+failing — so check `weather_error` and the location file, in that order.
+
+`--test` starts with an all-pixels frame on purpose: it answers "is the whole
+128x32 area alive and the right way up" before the glyph geometry is in play.
+
+Without the display attached the daemon still runs, serving `/status` with
+`"connected": false`, so the app side can be tested on a machine with no
+hardware.
+
+Two log lines mark the app side, once each per run:
+`[SegDisplay] hook active` (Main.qml was patched) and
+`[SegDisplay] panel daemon reachable` / `unreachable`.
+
+## Files
+
+| Path | Goes to |
+|---|---|
+| `manifest.json`, `views/*.qml`, `assets/images/logo.svg` | `<appRoot>/modules/segdisplay/` |
+| `scripts/segdisplay.py`, `scripts/patch_main_qml.py` | `<appRoot>/modules/segdisplay/scripts/` |
+| `scripts/segdisplay.service` | `/etc/systemd/system/` (placeholders substituted) |

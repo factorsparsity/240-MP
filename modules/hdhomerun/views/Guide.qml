@@ -176,6 +176,9 @@ FocusScope {
             }
             guideRoot.currentEvent = guideRoot.eventIndexAt(guideRoot.currentChannelNumber(),
                                                            guideRoot.windowStart)
+            // currentChannel may not have changed (restoring row 0, or a fresh
+            // open), so the handler below cannot be relied on to fire here.
+            hdhr.announceChannel(guideRoot.currentChannelNumber())
         }
 
         function onGuideLoaded(g) {
@@ -194,6 +197,9 @@ FocusScope {
         hdhr.load_channels()
         hdhr.load_guide()
     }
+
+    // Front panel follows the highlighted row, same as the channel list.
+    onCurrentChannelChanged: hdhr.announceChannel(currentChannelNumber())
 
     Keys.onPressed: function(event) {
         if (event.key === Qt.Key_Escape || event.key === Qt.Key_Backspace || event.key === Qt.Key_Back) {

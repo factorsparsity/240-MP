@@ -25,6 +25,13 @@ FocusScope {
     // anything doesn't bounce straight back into it.
     property bool _autoOpened: false
 
+    // The front panel follows the cursor, the way a cable box shows the channel
+    // you are about to select rather than only the one you settle on.
+    function announceCurrent() {
+        if (channels.length === 0) return
+        hdhr.announceChannel(channels[channelList.currentIndex].guideNumber)
+    }
+
     Connections {
         target: hdhr
 
@@ -35,6 +42,7 @@ FocusScope {
                 var restore = (navListState.currentIndex !== undefined) ? navListState.currentIndex : 0
                 channelList.currentIndex = Math.min(restore, items.length - 1)
                 channelList.positionViewAtIndex(channelList.currentIndex, ListView.Contain)
+                channelsRoot.announceCurrent()
             }
         }
 
@@ -119,6 +127,10 @@ FocusScope {
         height: root.sh * 0.525 //252
         clip: true
         focus: true
+
+        // Declarative rather than a call in each key handler: the index also
+        // moves on restore and on wrap, and those are easy to forget.
+        onCurrentIndexChanged: channelsRoot.announceCurrent()
 
         Keys.onUpPressed: {
             if (count === 0) return
