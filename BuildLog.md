@@ -31,6 +31,40 @@ Make changes on the feature branch, then `git checkout test-integration && git m
    (generic "current screen / label / playback" from `Main.qml` or AppCore)
    as its own PR; rework `segdisplay` and `announceChannel` onto it.
 
+## 2026-10-20 (evening) — deployed test-integration to the Pi
+
+**Pi:** `vcr@240mp.local` (10.0.1.28; key `~/.ssh/id_ed25519_pi240mp`; the raw IP
+fails host-key check — use the hostname). Pi 4, 1 GB, Debian 13, Qt 6.8 dev
+packages present. Runs the `install.sh` layout: `/opt/240mp/{bin,share/240mp}`,
+launched by `/usr/local/bin/240mp` from `240mp.service`.
+
+**How it was deployed** (repeatable): clone the fork's `test-integration` to
+`~/240-MP-src`; `cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=~/240mp-stage`;
+`cmake --build build -j2` (~5 min; -j2 because 1 GB RAM); `cmake --install`;
+run `modules/segdisplay/scripts/patch_main_qml.py` on the staged `Main.qml`;
+swap `/opt/240mp` for the stage (previous kept as `/opt/240mp.bak-2026-10-20`);
+`rm -rf ~/.cache/240-MP/qmlcache` (service has QML_FORCE_DISK_CACHE=1). Version
+string is `dev`, so the in-app self-updater refuses to overwrite it. Disabled the
+obsolete `musictv-fetch.{path,timer}`; all other module units already matched the
+repo. yt-dlp drop-in at `~/.local/share/240-MP/bin/yt-dlp` (2026.08.19).
+Rollback: swap the `.bak` back the same way.
+
+**Gotcha — NEVER `systemctl stop/restart 240mp` as-is: it powers the Pi off.**
+`ExecStopPost=/usr/local/bin/240mp-stop` runs `systemctl poweroff` for any exit
+except 10 (terminal), 11 (update restart), 12 (reboot) — documented in
+BUILDING.md, and it cost a physical power cycle. Safe pattern: drop-in
+`/etc/systemd/system/240mp.service.d/99-deploy-no-poweroff.conf` with
+`[Service]\nExecStopPost=`, `daemon-reload`, verify
+`systemctl show 240mp -p ExecStopPost --value` is empty, do the work, then
+remove the drop-in and `daemon-reload` (use a shell `trap` so it always comes off).
+`segdisplay.service` can be restarted normally.
+
+**Open: OLED not detected since that power cycle.** `segdisplay` reports
+`/dev/i2c-1: Input/output error — running dry` from boot (before the deploy, with
+the old build too); every earlier boot said `display connected at 0x3C`. Looks
+like wiring/hardware. After reseating: `sudo i2cdetect -y 1` should show `3c`,
+then `sudo systemctl restart segdisplay`.
+
 ## 2026-10-20 (later) — third repo found: Aug 16 work, front panel
 
 **The original source repo is `~/Developer/hdhomerun-module`** (local only, no
