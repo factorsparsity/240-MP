@@ -1,18 +1,13 @@
 import QtQuick
 import Components
 
-// Tuner picker.
-//
-// This screen exists because the module has no C++ backend any more. Device
-// selection used to be a manifest `list_single` with options_source "dynamic",
-// which requires an options_slot on a backend — so with the backend gone the
-// setting could not be populated and had to leave the settings screen entirely.
-// appCore.save_setting() is global, so persisting the choice still works fine.
+// Tuner picker, reached with D from the channel list and opened automatically
+// when no tuner is set. Settings → HDHomeRun → Tuner offers the same list.
+// The choice is saved with appCore.save_setting(), the same key the setting uses.
 //
 // Deliberately no free-text IP entry: 240-MP has no text-input setting type and
 // building a keyboard here is out of proportion. A tuner that discovery cannot
-// see (no internet — see HdhrService.discoverDevices) is set by seeding
-// device_id in config.json instead.
+// see (a different subnet, say) is set by seeding device_id in config.json.
 FocusScope {
     id: devicesRoot
 
@@ -63,12 +58,11 @@ FocusScope {
 
     Text {
         visible: devices.length === 0
-        // Discovery goes over the internet (QML has no UDP broadcast), so the
-        // failure mode users will actually hit is "no network", not "no tuner".
-        // Say so, and name the offline escape hatch rather than dead-ending.
+        // Name the escape hatch for a tuner broadcast cannot reach, rather than
+        // dead-ending.
         text: !devicesRoot.loaded ? "SEARCHING..."
               : (devicesRoot.errorMessage !== ""
-                 ? devicesRoot.errorMessage + "\n\nDISCOVERY NEEDS INTERNET.\nSET device_id IN config.json TO USE A TUNER OFFLINE."
+                 ? devicesRoot.errorMessage + "\n\nSET device_id IN config.json TO USE A TUNER BY IP."
                  : "NO TUNERS FOUND\n\nCHECK THE TUNER IS POWERED AND ON THIS NETWORK.")
         color: root.tertiaryColor
         font.family: root.globalFont

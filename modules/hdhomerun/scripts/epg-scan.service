@@ -19,10 +19,10 @@ User=@USER@
 # time and silently diverging once someone switches tuners.
 ExecStart=/usr/bin/python3 @MODULE_DIR@/scripts/epg-rescan-trigger.py --force
 Environment=EPG_SCANNER=@MODULE_DIR@/scripts/epg_scanner.py
-# See epg-rescan.service: without this the trigger's own log lines are buffered
+# Without this the trigger's own log lines are buffered
 # until it exits, so a running scan looks like it skipped them entirely.
 Environment=PYTHONUNBUFFERED=1
-# Write to the app's own data dir, which is where HdhrService.load_guide() reads
+# Write to the app's own data dir, which is where HDHomeRunBackend::read_guide() reads
 # from. No root needed, and no separate /var/lib path to keep in sync.
 Environment=EPG_CACHE_PATH=@HOME@/.local/share/240-MP/epg_cache.json
 # Each multiplex capture ties up one tuner for ~45s. Avoid clashing with an

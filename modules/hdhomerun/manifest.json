@@ -11,6 +11,15 @@
       "default": "OFF"
     },
     {
+      "key": "device_id",
+      "label": "Tuner",
+      "type": "list_single",
+      "options_source": "dynamic",
+      "options_slot": "get_devices",
+      "apply_slot": "apply_device",
+      "description": "HDHomeRun tuners found on your network. D in the channel list opens the same picker."
+    },
+    {
       "key": "start_view",
       "label": "Start In",
       "type": "list_single",
@@ -24,14 +33,15 @@
       "type": "list_single",
       "options": ["internet480", "internet360", "internet240", "internet720", "mobile", "heavy", "none"],
       "default": "internet480",
-      "description": "EXTEND models only; ignored on tuners with no encoder. internet480 is 704x480, which matches a 480i CRT."
+      "requires_capability": "transcode",
+      "description": "Shown for tuners with a hardware encoder (EXTEND). internet480 is 704x480, which matches a 480i CRT."
     },
     {
       "key": "rescan_guide",
       "label": "Rescan Guide Data",
-      "type": "toggle",
-      "default": "OFF",
-      "description": "Switch on to start a guide scan (~90 min). Clears itself once the scan begins. Requires epg-rescan.path — see README."
+      "type": "action",
+      "action_slot": "rescan_guide",
+      "description": "Starts a guide scan in the background. The first takes about 90 minutes; later ones are shorter."
     }
   ]
 }

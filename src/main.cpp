@@ -22,6 +22,7 @@
 #include "modules/nfc_reader/NfcReaderBackend.h"
 #include "modules/youtube/YouTubeBackend.h"
 #include "modules/musictv/MusicTvBackend.h"
+#include "modules/hdhomerun/HDHomeRunBackend.h"
 #include "modules/weather/WeatherBackend.h"
 #include "modules/scripts/ScriptsBackend.h"
 #include "player/MpvController.h"
@@ -158,6 +159,7 @@ int main(int argc, char *argv[]) {
     NfcReaderBackend    nfcReader(appRoot, dataRoot, &appCore);
     YouTubeBackend      youtubeBackend(appRoot, dataRoot);
     MusicTvBackend      musictvBackend(appRoot, dataRoot);
+    HDHomeRunBackend    hdhomerunBackend(appRoot, dataRoot);
     WeatherBackend      weatherBackend(appRoot, dataRoot);
     DisplayHandoff      displayHandoff;
     ScriptsBackend      scriptsBackend(appRoot, dataRoot, &displayHandoff);
@@ -187,6 +189,7 @@ int main(int argc, char *argv[]) {
     appCore.registerModule("com.240mp.nfc_reader",   "nfcReaderBackend",   &nfcReader,   ctx);
     appCore.registerModule("com.240mp.youtube",      "youtubeBackend",     &youtubeBackend, ctx);
     appCore.registerModule("com.240mp.musictv",      "musictvBackend",     &musictvBackend, ctx);
+    appCore.registerModule("com.240mp.hdhomerun",    "hdhomerunBackend",   &hdhomerunBackend, ctx);
     appCore.registerModule("com.240mp.weather",      "weatherBackend",     &weatherBackend, ctx);
     appCore.registerModule("com.240mp.scripts",      "scriptsBackend",     &scriptsBackend, ctx);
 
